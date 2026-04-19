@@ -1,0 +1,49 @@
+# Node / Bun
+node_modules/
+dist/
+.pnp
+.pnp.js
+
+# Build outputs
+*.local
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.nyc_output/
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# Misc
+*.bak
+*.tmp
+.cache/
