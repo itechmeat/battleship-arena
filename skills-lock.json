@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "skills": {
+    "SQLite Database Expert": {
+      "source": "martinholovsky/claude-skills-generator",
+      "sourceType": "github",
+      "computedHash": "0e75baa1c3159dba4c6db79330634327039c9813410256b73357dcbb0ed9d0ea"
+    },
+    "astro-developer": {
+      "source": "withastro/astro",
+      "sourceType": "github",
+      "computedHash": "48b1be8c625d1c3897bfaa45c4d33205e63e844ce7bb3201f30ea2fb51ad470c"
+    },
+    "bun": {
+      "source": "itechmeat/llm-code",
+      "sourceType": "github",
+      "computedHash": "ed7210f1b2f675baca6db50c196d7d5cd143fb9e11ca8491412377b584112ff8"
+    },
+    "bun-sqlite": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "computedHash": "065b56760a93491764b52bece31ef482f7929292ef32386689be9c438aac3eb3"
+    },
+    "c4-architecture": {
+      "source": "softaworks/agent-toolkit",
+      "sourceType": "github",
+      "computedHash": "f35f57420c35f2e8413e1e22934ca3950cae8286499f6fbe978cff604c35cfcd"
+    },
+    "changelog": {
+      "source": "itechmeat/llm-code",
+      "sourceType": "github",
+      "computedHash": "17239a739138d30f0e11e879869a411ca341e633809bb4170d49b07e1e27d4d0"
+    },
+    "commits": {
+      "source": "itechmeat/llm-code",
+      "sourceType": "github",
+      "computedHash": "623ec6248b233e37270535ddd5edf8ae02d21acd84eed79c80194fcfb12778d4"
+    },
+    "hono": {
+      "source": "yusukebe/hono-skill",
+      "sourceType": "github",
+      "computedHash": "220e5e1b12bbaeec49ec362b6e2262d77632d0536e9758bba9acbbc323fef990"
+    },
+    "hono-cloudflare": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "computedHash": "e05cc4ac4be76ea0ecc124b7adf05d53c835dcabd9ed724abbb02ee9451e6ba7"
+    },
+    "hono-core": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "computedHash": "0e9fab1a5a9521a406bd047f4abbb5e8be9f900dd5ce21ac7db0eb709a9ff02f"
+    },
+    "hono-testing": {
+      "source": "bobmatnyc/claude-mpm-skills",
+      "sourceType": "github",
+      "computedHash": "9db9f765f3ec18620074ff216421bdae02db589e44e921e2f2150718a9d870fb"
+    },
+    "hono-typescript": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "computedHash": "3a6f5fecba6736272630126d3d84c75c737228af925258cd1298c7b24c98e97a"
+    },
+    "makefile": {
+      "source": "itechmeat/llm-code",
+      "sourceType": "github",
+      "computedHash": "548231eb3e2c90365755d63464532eceb2468cc4c0a3cf91ef4132efe3467ea0"
+    },
+    "sqlite-best-practices": {
+      "source": "erayack/sqlite-best-practices",
+      "sourceType": "github",
+      "computedHash": "1fed11dc2aead8a3bf2b72211cedbdc37ae7b9ef856855293c4109ac4f832f1a"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "computedHash": "0a413bf988d06481f69bb81df2070741c3ba12dd9f1be2706d57f259c905992d"
+    },
+    "vite": {
+      "source": "itechmeat/llm-code",
+      "sourceType": "github",
+      "computedHash": "33cea221234f6b0b62b80ec53c27ccc06ba6534fa5b35b8b2f00f472a225ea7b"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "categories": {
+    "correctness": "warn",
+    "suspicious": "warn",
+    "perf": "warn",
+    "style": "warn",
+    "pedantic": "off",
+    "nursery": "off"
+  },
+  "rules": {
+    "func-style": "off",
+    "id-length": "off",
+    "max-statements": "off",
+    "no-magic-numbers": "off",
+    "no-nested-ternary": "off",
+    "no-ternary": "off",
+    "no-unused-vars": "warn",
+    "prefer-const": "warn",
+    "no-console": "off",
+    "sort-imports": "off",
+    "sort-keys": "off",
+    "unicorn/filename-case": "off",
+    "unicorn/no-null": "off"
+  }
+}
