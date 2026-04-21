@@ -22,7 +22,7 @@
     "test": "DATABASE_PATH=:memory: bun test"
   },
   "devDependencies": {
-    "bun-types": "1.3.12",
+    "bun-types": "1.3.13",
     "lefthook": "2.1.6",
     "oxfmt": "0.46.0",
     "oxlint": "1.61.0",
