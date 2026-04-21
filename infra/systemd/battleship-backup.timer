@@ -1,0 +1,10 @@
+[Unit]
+Description=Run BattleShipArena local backups every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=battleship-backup.service
+
+[Install]
+WantedBy=timers.target

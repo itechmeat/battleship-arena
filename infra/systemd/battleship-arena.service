@@ -1,0 +1,30 @@
+[Unit]
+Description=BattleShipArena production backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=battleship
+Group=battleship
+WorkingDirectory=/opt/battleship-arena/backend/dist
+ExecStart=/usr/bin/env bun /opt/battleship-arena/backend/dist/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=310s
+Environment=PORT=8081
+Environment=DATABASE_PATH=/var/lib/battleship-arena/project.db
+Environment=MAINTENANCE_SOFT=0
+Environment=SHUTDOWN_GRACE_SEC=300
+Environment=COMMIT_SHA=unknown
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryDenyWriteExecute=yes
+ReadWritePaths=/var/lib/battleship-arena
+
+[Install]
+WantedBy=multi-user.target

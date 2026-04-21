@@ -1,0 +1,10 @@
+[Unit]
+Description=Run BattleShipArena off-host backup sync daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=battleship-offhost-rsync.service
+
+[Install]
+WantedBy=timers.target

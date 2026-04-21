@@ -1,0 +1,59 @@
+{
+  email EMAIL_PLACEHOLDER
+}
+
+(maintenance_gate) {
+  @maintenance_on file /etc/battleship-arena/maintenance.on
+  handle @maintenance_on {
+    root * /var/www/battleship-arena
+    try_files /maintenance.html
+    header Cache-Control "no-store"
+    file_server {
+      status 503
+    }
+  }
+}
+
+arena.example {
+  import maintenance_gate
+
+  root * /var/www/battleship-arena/web/
+
+  handle /api/* {
+    header Cache-Control "no-store"
+    reverse_proxy 127.0.0.1:8081 {
+      flush_interval -1
+      transport http {
+        read_timeout 10m
+        write_timeout 10m
+      }
+    }
+  }
+
+  @immutable path /_astro/*
+  header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+  file_server
+}
+
+staging.arena.example {
+  import maintenance_gate
+
+  root * /var/www/battleship-arena-staging/web/
+
+  handle /api/* {
+    header Cache-Control "no-store"
+    reverse_proxy 127.0.0.1:8082 {
+      flush_interval -1
+      transport http {
+        read_timeout 10m
+        write_timeout 10m
+      }
+    }
+  }
+
+  @immutable path /_astro/*
+  header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+  file_server
+}

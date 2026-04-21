@@ -1,0 +1,22 @@
+{
+  "name": "@battleship-arena/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && bun run ./scripts/build-sw.ts",
+    "preview": "astro preview",
+    "typecheck": "astro check",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@astrojs/solid-js": "6.0.1",
+    "@battleship-arena/shared": "workspace:*",
+    "astro": "6.1.8",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.8",
+    "@types/bun": "1.3.12"
+  }
+}

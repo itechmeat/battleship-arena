@@ -1,0 +1,19 @@
+[Unit]
+Description=BattleShipArena off-host backup sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=battleship
+Group=battleship
+WorkingDirectory=/opt/battleship-arena
+ExecStart=/usr/bin/env bash /opt/battleship-arena/infra/scripts/offhost-rsync.sh
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryDenyWriteExecute=yes
+ReadWritePaths=/var/backups/battleship-arena

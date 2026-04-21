@@ -3,6 +3,8 @@ node_modules/
 dist/
 .pnp
 .pnp.js
+.astro/
+.turbo/
 
 # Build outputs
 *.local
@@ -13,6 +15,10 @@ dist/
 .env.local
 .env.*.local
 !.env.example
+dev.db
+dev.db-journal
+dev.db-wal
+dev.db-shm
 
 # IDE
 .idea/

@@ -1,0 +1,22 @@
+{
+  "name": "@battleship-arena/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch ./src/index.ts",
+    "build": "bun build ./src/index.ts --target bun --outdir ./dist && rm -rf ./dist/db/migrations && mkdir -p ./dist/db && cp -R ./src/db/migrations ./dist/db/migrations",
+    "typecheck": "tsc --noEmit",
+    "test": "DATABASE_PATH=:memory: bun test",
+    "drizzle:generate": "drizzle-kit generate --config=./drizzle.config.ts"
+  },
+  "dependencies": {
+    "@battleship-arena/shared": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "hono": "4.12.14"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.12",
+    "drizzle-kit": "0.31.10"
+  }
+}
