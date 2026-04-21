@@ -162,7 +162,7 @@ const array = new Uint8Array(buffer);
 import { read } from "bun:ffi";
 
 // Fast reading (no ArrayBuffer creation)
-const value = read.u8(myPtr, 0);  // byte at offset 0
+const value = read.u8(myPtr, 0); // byte at offset 0
 const value2 = read.i32(myPtr, 4); // int32 at offset 4
 ```
 
@@ -210,7 +210,7 @@ const callback = new JSCallback(
     returns: "bool",
     args: ["ptr", "usize"],
     threadsafe: false, // Set true for cross-thread calls
-  }
+  },
 );
 
 // Pass to native function
@@ -247,8 +247,8 @@ toArrayBuffer(
   bytes,
   0,
   byteLength,
-  deallocatorContext,    // Optional context pointer
-  deallocatorFunction,   // Called when GC frees buffer
+  deallocatorContext, // Optional context pointer
+  deallocatorFunction, // Called when GC frees buffer
 );
 ```
 

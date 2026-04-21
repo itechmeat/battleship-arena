@@ -61,8 +61,8 @@ try {
 const { exitCode, stdout, stderr } = await $`command`.nothrow().quiet();
 
 // Global default
-$.nothrow();  // Disable throws globally
-$.throws(true);  // Re-enable
+$.nothrow(); // Disable throws globally
+$.throws(true); // Re-enable
 ```
 
 ## Environment Variables
@@ -80,18 +80,18 @@ await $`echo $FOO`.env({ ...process.env, FOO: "bar" });
 
 // Set globally
 $.env({ FOO: "bar" });
-await $`echo $FOO`;  // bar
+await $`echo $FOO`; // bar
 ```
 
 ## Working Directory
 
 ```ts
 // Single command
-await $`pwd`.cwd("/tmp");  // /tmp
+await $`pwd`.cwd("/tmp"); // /tmp
 
 // Global default
 $.cwd("/tmp");
-await $`pwd`;  // /tmp
+await $`pwd`; // /tmp
 ```
 
 ## Redirection
@@ -101,7 +101,7 @@ await $`pwd`;  // /tmp
 ```ts
 // To file
 await $`echo "Hello" > file.txt`;
-await $`echo "More" >> file.txt`;  // Append
+await $`echo "More" >> file.txt`; // Append
 
 // To JavaScript objects
 const buffer = Buffer.alloc(100);
@@ -109,7 +109,7 @@ await $`echo "Hello" > ${buffer}`;
 
 // Stderr
 await $`command 2> errors.txt`;
-await $`command &> all.txt`;  // Both stdout+stderr
+await $`command &> all.txt`; // Both stdout+stderr
 ```
 
 ### Input Redirection
@@ -133,8 +133,8 @@ await $`cat < ${Bun.file("input.txt")}`;
 ### Stream Redirection
 
 ```ts
-await $`command 2>&1`;  // stderr to stdout
-await $`command 1>&2`;  // stdout to stderr
+await $`command 2>&1`; // stderr to stdout
+await $`command 1>&2`; // stdout to stderr
 ```
 
 ## Piping
@@ -167,13 +167,13 @@ All interpolated values are **automatically escaped**:
 
 ```ts
 const userInput = "file.txt; rm -rf /";
-await $`ls ${userInput}`;  // Safe: treated as literal string
+await $`ls ${userInput}`; // Safe: treated as literal string
 ```
 
 ### Raw (Unescaped) Strings
 
 ```ts
-await $`echo ${{ raw: "$(date)" }}`;  // Executes date command
+await $`echo ${{ raw: "$(date)" }}`; // Executes date command
 ```
 
 ## Builtin Commands
@@ -248,11 +248,7 @@ await $`bun build src/index.ts --outdir dist`;
 ### Parallel Commands
 
 ```ts
-await Promise.all([
-  $`bun run lint`,
-  $`bun run typecheck`,
-  $`bun run test`,
-]);
+await Promise.all([$`bun run lint`, $`bun run typecheck`, $`bun run test`]);
 ```
 
 ### Git Operations
@@ -294,10 +290,10 @@ await $`kubectl set image deployment/myapp myapp=${tag}`;
 
 ```ts
 // Spawning new shell loses protection
-await $`bash -c "echo ${userInput}"`;  // UNSAFE
+await $`bash -c "echo ${userInput}"`; // UNSAFE
 
 // Argument injection still possible
-await $`git ls-remote origin ${branch}`;  // Git interprets flags
+await $`git ls-remote origin ${branch}`; // Git interprets flags
 ```
 
 **Always sanitize** user input before passing to commands.

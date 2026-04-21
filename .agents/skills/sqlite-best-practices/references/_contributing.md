@@ -63,9 +63,9 @@ CREATE TABLE users (
 
 ## Impact Level Guidelines
 
-| Level | Improvement | Use When |
-|-------|-------------|----------|
-| **CRITICAL** | 10-100x / Concurrency | WAL Mode, Missing Indexes, Busy Timeouts |
-| **HIGH** | 5-20x / Integrity | Strict Tables, Foreign Keys, Covering Indexes |
-| **MEDIUM** | 2-5x | Partial Indexes, Upserts, Transactions |
-| **LOW** | Incremental | Specific JSON optimizations |
+| Level        | Improvement           | Use When                                      |
+| ------------ | --------------------- | --------------------------------------------- |
+| **CRITICAL** | 10-100x / Concurrency | WAL Mode, Missing Indexes, Busy Timeouts      |
+| **HIGH**     | 5-20x / Integrity     | Strict Tables, Foreign Keys, Covering Indexes |
+| **MEDIUM**   | 2-5x                  | Partial Indexes, Upserts, Transactions        |
+| **LOW**      | Incremental           | Specific JSON optimizations                   |

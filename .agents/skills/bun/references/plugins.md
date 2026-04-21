@@ -183,10 +183,7 @@ import nativeAddon from "./my-addon.node";
 plugin({
   name: "native-plugin",
   setup(build) {
-    build.onBeforeParse(
-      { filter: "**/*.tsx" },
-      { napiModule: nativeAddon, symbol: "transform" }
-    );
+    build.onBeforeParse({ filter: "**/*.tsx" }, { napiModule: nativeAddon, symbol: "transform" });
   },
 });
 ```

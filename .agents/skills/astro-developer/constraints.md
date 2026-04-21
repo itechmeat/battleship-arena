@@ -40,11 +40,11 @@ Code in `packages/astro` has restricted Node.js API usage because Astro runs in 
 
 ```typescript
 // FORBIDDEN in runtime/ folders or *runtime*.ts files
-import fs from 'node:fs';
-import path from 'node:path';
-import { Buffer } from 'node:buffer';
-import process from 'node:process';
-import crypto from 'node:crypto';
+import fs from "node:fs";
+import path from "node:path";
+import { Buffer } from "node:buffer";
+import process from "node:process";
+import crypto from "node:crypto";
 // etc.
 ```
 
@@ -68,10 +68,10 @@ import crypto from 'node:crypto';
 
 ```typescript
 // AVOID in core/ unless in Vite plugin
-import fs from 'node:fs';
+import fs from "node:fs";
 
 // PREFER cross-platform utilities
-import { fileURLToPath } from '@astrojs/internal-helpers/path';
+import { fileURLToPath } from "@astrojs/internal-helpers/path";
 ```
 
 ### Special Case: Vite Plugins
@@ -82,15 +82,15 @@ import { fileURLToPath } from '@astrojs/internal-helpers/path';
 // ALLOWED
 export function myVitePlugin() {
   return {
-    name: 'my-plugin',
+    name: "my-plugin",
     load: {
       filter: {
         id: /\.astro$/,
       },
       async handler(id) {
         // Can use Node.js APIs here
-        const fs = await import('node:fs/promises');
-        const content = await fs.readFile(id, 'utf-8');
+        const fs = await import("node:fs/promises");
+        const content = await fs.readFile(id, "utf-8");
         return { code: content };
       },
     },
@@ -104,7 +104,7 @@ export function myVitePlugin() {
 // FORBIDDEN
 export function myVitePlugin() {
   return {
-    name: 'my-plugin',
+    name: "my-plugin",
     load: {
       filter: {
         id: new RegExp(`^\\0virtual:my-module$`),
@@ -154,12 +154,12 @@ Use `@astrojs/internal-helpers` instead of Node.js APIs:
 
 ```typescript
 // BAD: Direct Node.js API
-import { resolve } from 'node:path';
-const fullPath = resolve('./config.json');
+import { resolve } from "node:path";
+const fullPath = resolve("./config.json");
 
 // GOOD: Cross-platform utility
-import { fileURLToPath } from '@astrojs/internal-helpers/path';
-const fullPath = fileURLToPath(new URL('./config.json', import.meta.url));
+import { fileURLToPath } from "@astrojs/internal-helpers/path";
+const fullPath = fileURLToPath(new URL("./config.json", import.meta.url));
 ```
 
 #### Pattern 2: Vite Plugin for File Operations
@@ -170,15 +170,15 @@ If you need file operations, do them in a Vite plugin:
 // GOOD: In Vite plugin implementation
 export function myVitePlugin() {
   return {
-    name: 'my-plugin',
+    name: "my-plugin",
     load: {
       filter: {
         id: /\.config\.js$/,
       },
       async handler(id) {
         // Safe to use Node.js APIs here
-        const fs = await import('node:fs/promises');
-        const content = await fs.readFile(id, 'utf-8');
+        const fs = await import("node:fs/promises");
+        const content = await fs.readFile(id, "utf-8");
         return { code: content };
       },
     },
@@ -192,12 +192,12 @@ Generate data at build time via Vite plugin, embed in virtual module:
 
 ```typescript
 // Vite plugin - safe to use Node.js APIs
-const VIRTUAL_MODULE_ID = 'virtual:my-config';
-const RESOLVED_VIRTUAL_MODULE_ID = '\0' + VIRTUAL_MODULE_ID;
+const VIRTUAL_MODULE_ID = "virtual:my-config";
+const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
 export function myVitePlugin() {
   return {
-    name: 'my-plugin',
+    name: "my-plugin",
     resolveId: {
       filter: {
         id: new RegExp(`^${VIRTUAL_MODULE_ID}$`),
@@ -212,8 +212,8 @@ export function myVitePlugin() {
       },
       async handler() {
         // Read at build time (safe here)
-        const fs = await import('node:fs/promises');
-        const config = JSON.parse(await fs.readFile('./config.json', 'utf-8'));
+        const fs = await import("node:fs/promises");
+        const config = JSON.parse(await fs.readFile("./config.json", "utf-8"));
         // Embed in generated code (no Node.js APIs in output)
         return {
           code: `export default ${JSON.stringify(config)}`,
@@ -262,10 +262,10 @@ Most commonly in type imports.
 
 ```typescript
 // BAD: Import type from implementation
-import type { AstroConfig } from '../config/index.js';
+import type { AstroConfig } from "../config/index.js";
 
 // GOOD: Import type from types/
-import type { AstroConfig } from '../types/public.js';
+import type { AstroConfig } from "../types/public.js";
 ```
 
 ### Prevention
@@ -300,7 +300,7 @@ Code must respect execution boundaries:
 ```typescript
 // BAD: Runtime code importing build code
 // In runtime/server/render.ts
-import { buildSomething } from '../../core/build/utils.js';
+import { buildSomething } from "../../core/build/utils.js";
 ```
 
 **Why bad**: Runtime shouldn't depend on build-time code. Creates coupling and increases bundle size.
@@ -316,7 +316,7 @@ const manifest = {
 };
 
 // Runtime (runtime/server/)
-import { manifest } from 'virtual:astro:manifest';
+import { manifest } from "virtual:astro:manifest";
 ```
 
 ## Package Boundaries
@@ -459,10 +459,10 @@ git add -i
 
 ```typescript
 // BAD: Always logs
-console.log('Processing file:', file);
+console.log("Processing file:", file);
 
 // GOOD: Use logger with levels
-logger.debug('Processing file:', file);
+logger.debug("Processing file:", file);
 ```
 
 ## Common Gotchas
@@ -472,12 +472,12 @@ logger.debug('Processing file:', file);
 ```typescript
 // BAD: Relative to cwd
 const fixture = await loadFixture({
-  root: 'fixtures/my-test/',
+  root: "fixtures/my-test/",
 });
 
 // GOOD: Relative to test file
 const fixture = await loadFixture({
-  root: './fixtures/my-test/',
+  root: "./fixtures/my-test/",
 });
 ```
 
@@ -499,7 +499,7 @@ before(async () => {
 
 ```typescript
 // BAD: Server not stopped
-describe('dev', () => {
+describe("dev", () => {
   before(async () => {
     devServer = await fixture.startDevServer();
   });
@@ -507,7 +507,7 @@ describe('dev', () => {
 });
 
 // GOOD: Always cleanup
-describe('dev', () => {
+describe("dev", () => {
   before(async () => {
     devServer = await fixture.startDevServer();
   });
@@ -521,20 +521,20 @@ describe('dev', () => {
 
 ```typescript
 // BAD: Runtime import for types
-import { AstroConfig } from 'astro';
+import { AstroConfig } from "astro";
 
 // GOOD: Type-only import
-import type { AstroConfig } from 'astro';
+import type { AstroConfig } from "astro";
 ```
 
 ### 5. Module Resolution
 
 ```typescript
 // BAD: May fail in different contexts
-import helper from '../utils';
+import helper from "../utils";
 
 // GOOD: Explicit extension
-import helper from '../utils.js';
+import helper from "../utils.js";
 ```
 
 ## Constraint Checklist

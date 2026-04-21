@@ -164,13 +164,13 @@ const count = insertMany([
 
 // Transaction modes
 const tx = db.transaction(() => {
-  db.run('INSERT INTO users (name, email) VALUES (?, ?)', ['Alice', 'alice@example.com']);
-  db.run('UPDATE accounts SET balance = balance - 100 WHERE user_id = ?', [1]);
+  db.run("INSERT INTO users (name, email) VALUES (?, ?)", ["Alice", "alice@example.com"]);
+  db.run("UPDATE accounts SET balance = balance - 100 WHERE user_id = ?", [1]);
 });
 
-tx.deferred();   // Default: defer lock until first write
-tx.immediate();  // Lock immediately on transaction start
-tx.exclusive();  // Exclusive lock, blocks all other connections
+tx.deferred(); // Default: defer lock until first write
+tx.immediate(); // Lock immediately on transaction start
+tx.exclusive(); // Exclusive lock, blocks all other connections
 ```
 
 ## Batch Operations
@@ -225,7 +225,7 @@ const columns = stmt.columnNames;
 
 // Type annotations (Bun extension)
 const typedStmt = db.prepare<{ id: number; name: string }, [number]>(
-  "SELECT id, name FROM users WHERE id = ?"
+  "SELECT id, name FROM users WHERE id = ?",
 );
 const user = typedStmt.get(1);
 // user is typed as { id: number; name: string } | null
@@ -319,12 +319,12 @@ class UserRepository {
 
 ## Common Errors
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `SQLITE_CONSTRAINT` | Constraint violation | Check UNIQUE/FK constraints |
-| `SQLITE_BUSY` | Database locked | Use WAL mode, add retry logic |
-| `no such table` | Table doesn't exist | Run CREATE TABLE first |
-| `database is locked` | Concurrent access | Enable WAL mode |
+| Error                | Cause                | Fix                           |
+| -------------------- | -------------------- | ----------------------------- |
+| `SQLITE_CONSTRAINT`  | Constraint violation | Check UNIQUE/FK constraints   |
+| `SQLITE_BUSY`        | Database locked      | Use WAL mode, add retry logic |
+| `no such table`      | Table doesn't exist  | Run CREATE TABLE first        |
+| `database is locked` | Concurrent access    | Enable WAL mode               |
 
 ## Performance Tips
 
@@ -345,10 +345,12 @@ PRAGMA foreign_keys = ON;
 ## When to Load References
 
 Load `references/pragmas.md` when:
+
 - Performance tuning
 - Journal modes
 - Memory configuration
 
 Load `references/fts.md` when:
+
 - Full-text search
 - FTS5 configuration

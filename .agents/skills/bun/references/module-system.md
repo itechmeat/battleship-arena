@@ -7,9 +7,9 @@ Module resolution, auto-install, and file type handling.
 
 ```typescript
 // Extension optional
-import { hello } from "./hello";      // Tries .tsx, .ts, .js, etc.
-import { hello } from "./hello.ts";   // Explicit
-import { hello } from "./hello.js";   // Also resolves to .ts
+import { hello } from "./hello"; // Tries .tsx, .ts, .js, etc.
+import { hello } from "./hello.ts"; // Explicit
+import { hello } from "./hello.js"; // Also resolves to .ts
 ```
 ````
 
@@ -88,9 +88,9 @@ import config from "@config";
 When no `node_modules` exists, Bun auto-installs packages:
 
 ```typescript
-import { z } from "zod";        // Auto-installs latest
+import { z } from "zod"; // Auto-installs latest
 import { z } from "zod@3.22.0"; // Exact version
-import { z } from "zod@^3.20";  // Semver range
+import { z } from "zod@^3.20"; // Semver range
 ```
 
 **Version resolution:**

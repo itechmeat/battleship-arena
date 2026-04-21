@@ -131,7 +131,7 @@ const transpiler = new Bun.Transpiler({
   // Export manipulation
   exports: {
     eliminate: ["debugOnly"],
-    replace: { "oldName": "newName" },
+    replace: { oldName: "newName" },
   },
 });
 ```
@@ -191,7 +191,7 @@ const transpiler = new Bun.Transpiler({
   target: "browser",
   define: {
     "process.env.NODE_ENV": '"production"',
-    "__DEV__": "false",
+    __DEV__: "false",
   },
   trimUnusedImports: true,
   minifyWhitespace: true,
@@ -211,9 +211,7 @@ async function getDependencies(file: string) {
   const code = await Bun.file(file).text();
   const { imports } = transpiler.scan(code);
 
-  return imports
-    .filter(i => i.kind === "import-statement")
-    .map(i => i.path);
+  return imports.filter((i) => i.kind === "import-statement").map((i) => i.path);
 }
 
 const deps = await getDependencies("src/index.ts");

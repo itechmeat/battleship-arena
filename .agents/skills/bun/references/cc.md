@@ -191,7 +191,9 @@ cc({
 ```ts
 import { cc } from "bun:ffi";
 
-const { symbols: { add, multiply } } = cc({
+const {
+  symbols: { add, multiply },
+} = cc({
   source: `
     int add(int a, int b) { return a + b; }
     double multiply(double a, double b) { return a * b; }
@@ -202,7 +204,7 @@ const { symbols: { add, multiply } } = cc({
   },
 });
 
-console.log(add(1, 2));        // 3
+console.log(add(1, 2)); // 3
 console.log(multiply(2.5, 4)); // 10.0
 ```
 
@@ -212,7 +214,9 @@ console.log(multiply(2.5, 4)); // 10.0
 import { cc } from "bun:ffi";
 import source from "./db.c" with { type: "file" };
 
-const { symbols: { get_version } } = cc({
+const {
+  symbols: { get_version },
+} = cc({
   source,
   library: ["sqlite3"],
   symbols: {
@@ -241,7 +245,9 @@ const char* get_version() {
 ```ts
 import { cc, ptr } from "bun:ffi";
 
-const { symbols: { sum_array } } = cc({
+const {
+  symbols: { sum_array },
+} = cc({
   source: `
     int sum_array(int* arr, int len) {
       int sum = 0;

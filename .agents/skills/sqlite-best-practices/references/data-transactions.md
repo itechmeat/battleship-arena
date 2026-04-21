@@ -29,6 +29,6 @@ UPDATE users SET age = 20 WHERE id = 1;
 COMMIT;
 ```
 
-**Rule:** If a transaction will *ever* write, start it with `BEGIN IMMEDIATE`.
+**Rule:** If a transaction will _ever_ write, start it with `BEGIN IMMEDIATE`.
 
 Reference: [BEGIN TRANSACTION](https://www.sqlite.org/lang_transaction.html)

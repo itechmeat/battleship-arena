@@ -7,7 +7,7 @@ tags: indexes, covering-index, performance
 
 ## Use Covering Indexes to Skip Table Lookups
 
-A "Covering Index" contains *all* columns required by a query. SQLite can answer the query directly from the index B-Tree without looking up the main table row.
+A "Covering Index" contains _all_ columns required by a query. SQLite can answer the query directly from the index B-Tree without looking up the main table row.
 
 **Incorrect (Index + Table Lookup):**
 

@@ -30,7 +30,7 @@ CREATE TABLE items (
 );
 ```
 
-*   **VIRTUAL:** Calculated on the fly (saves space).
-*   **STORED:** Calculated on write (saves CPU on read).
+- **VIRTUAL:** Calculated on the fly (saves space).
+- **STORED:** Calculated on write (saves CPU on read).
 
 Reference: [Generated Columns](https://www.sqlite.org/gencol.html)

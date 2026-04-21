@@ -44,12 +44,12 @@ DEBUG=astro:render,astro:server astro dev
 
 ```typescript
 // Pattern: Add logs with context prefix
-console.log('[CONTEXT] Message:', data);
+console.log("[CONTEXT] Message:", data);
 
 // Example
-console.log('[BUILD] Processing routes:', routes.length);
-console.log('[RENDER] Component:', component.name);
-console.log('[CONTENT] Collections:', collections);
+console.log("[BUILD] Processing routes:", routes.length);
+console.log("[RENDER] Component:", component.name);
+console.log("[CONTENT] Collections:", collections);
 ```
 
 **Workflow:**
@@ -61,9 +61,9 @@ console.log('[CONTENT] Collections:', collections);
 **Use Astro's debug logger** (optional):
 
 ```typescript
-import { debug } from '../logger/core.js';
-const logger = debug('astro:feature-name');
-logger('Operation starting', { data });
+import { debug } from "../logger/core.js";
+const logger = debug("astro:feature-name");
+logger("Operation starting", { data });
 ```
 
 ### 3. Node Inspector (Advanced)
@@ -126,9 +126,9 @@ Core code runs in Node.js context: `packages/astro/src/core/`
 
 ```typescript
 // In build/index.ts
-console.log('[1] build() entry');
-console.log('[2] Settings created');
-console.log('[3] Build complete');
+console.log("[1] build() entry");
+console.log("[2] Settings created");
+console.log("[3] Build complete");
 ```
 
 ### Component Identification
@@ -313,14 +313,14 @@ Add logging in your loader implementation:
 ```typescript
 export function myLoader() {
   return {
-    name: 'my-loader',
+    name: "my-loader",
     async load({ store, logger }) {
-      logger.info('Loading data...');
+      logger.info("Loading data...");
       const data = await fetchData();
       logger.info(`Loaded ${data.length} entries`);
 
       for (const entry of data) {
-        console.log('[LOADER] Setting:', entry.id);
+        console.log("[LOADER] Setting:", entry.id);
         store.set({ id: entry.id, data: entry });
       }
     },

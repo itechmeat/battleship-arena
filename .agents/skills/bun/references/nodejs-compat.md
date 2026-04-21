@@ -124,7 +124,7 @@ delete require.cache[require.resolve("./module")];
 ```ts
 // Node.js ESM doesn't have __dirname
 // Bun provides it, or use:
-import.meta.dir;  // Directory
+import.meta.dir; // Directory
 import.meta.file; // Filename
 import.meta.path; // Full path
 ```

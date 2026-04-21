@@ -45,7 +45,7 @@ await client.set("key", "value");
 await client.connect();
 
 // Check status
-console.log(client.connected);      // boolean
+console.log(client.connected); // boolean
 console.log(client.bufferedAmount); // bytes buffered
 
 // Close when done
@@ -68,13 +68,13 @@ client.onclose = (error) => {
 
 ```ts
 const client = new RedisClient("redis://localhost:6379", {
-  connectionTimeout: 5000,      // ms (default: 10000)
-  idleTimeout: 30000,           // ms (default: 0 = no timeout)
-  autoReconnect: true,          // default: true
-  maxRetries: 10,               // default: 10
-  enableOfflineQueue: true,     // queue commands when disconnected
-  enableAutoPipelining: true,   // batch commands automatically
-  tls: true,                    // or { ca, cert, key, rejectUnauthorized }
+  connectionTimeout: 5000, // ms (default: 10000)
+  idleTimeout: 30000, // ms (default: 0 = no timeout)
+  autoReconnect: true, // default: true
+  maxRetries: 10, // default: 10
+  enableOfflineQueue: true, // queue commands when disconnected
+  enableAutoPipelining: true, // batch commands automatically
+  tls: true, // or { ca, cert, key, rejectUnauthorized }
 });
 ```
 
@@ -95,7 +95,7 @@ await redis.del("key");
 const exists = await redis.exists("key"); // boolean
 
 // Expiration
-await redis.expire("key", 3600);  // seconds
+await redis.expire("key", 3600); // seconds
 const ttl = await redis.ttl("key");
 ```
 
@@ -103,18 +103,15 @@ const ttl = await redis.ttl("key");
 
 ```ts
 await redis.set("counter", "0");
-await redis.incr("counter");  // +1
-await redis.decr("counter");  // -1
+await redis.incr("counter"); // +1
+await redis.decr("counter"); // -1
 ```
 
 ## Hash Operations
 
 ```ts
 // Set multiple fields
-await redis.hmset("user:123", [
-  "name", "Alice",
-  "email", "[email protected]",
-]);
+await redis.hmset("user:123", ["name", "Alice", "email", "[email protected]"]);
 
 // Get multiple fields
 const [name, email] = await redis.hmget("user:123", ["name", "email"]);
@@ -179,8 +176,8 @@ await subscriber.subscribe("channel", (message, channel) => {
 await redis.publish("channel", "Hello!");
 
 // Unsubscribe
-await subscriber.unsubscribe();           // all channels
-await subscriber.unsubscribe("channel");  // specific channel
+await subscriber.unsubscribe(); // all channels
+await subscriber.unsubscribe("channel"); // specific channel
 ```
 
 ## Pipelining
@@ -189,10 +186,7 @@ Commands are automatically pipelined:
 
 ```ts
 // These run concurrently
-const [a, b] = await Promise.all([
-  redis.get("key1"),
-  redis.get("key2"),
-]);
+const [a, b] = await Promise.all([redis.get("key1"), redis.get("key2")]);
 ```
 
 Disable if needed:
@@ -294,9 +288,12 @@ async function createSession(userId: number, data: object) {
   const key = `session:${sessionId}`;
 
   await redis.hmset(key, [
-    "userId", String(userId),
-    "created", String(Date.now()),
-    "data", JSON.stringify(data),
+    "userId",
+    String(userId),
+    "created",
+    String(Date.now()),
+    "data",
+    JSON.stringify(data),
   ]);
   await redis.expire(key, 86400); // 24h
 
@@ -306,11 +303,9 @@ async function createSession(userId: number, data: object) {
 async function getSession(sessionId: string) {
   const key = `session:${sessionId}`;
 
-  if (!await redis.exists(key)) return null;
+  if (!(await redis.exists(key))) return null;
 
-  const [userId, created, data] = await redis.hmget(key, [
-    "userId", "created", "data",
-  ]);
+  const [userId, created, data] = await redis.hmget(key, ["userId", "created", "data"]);
 
   return {
     userId: Number(userId),
