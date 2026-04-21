@@ -24,10 +24,10 @@ CREATE TABLE events (
 CREATE TABLE events (
   -- Store Booleans as INTEGER (0 or 1)
   is_active INTEGER CHECK (is_active IN (0, 1)),
-  
+
   -- Store Dates as INTEGER (Unix Epoch) or TEXT (ISO8601)
   created_at INTEGER, -- Seconds/Milliseconds since epoch
-  
+
   -- Use REAL for floating point, INTEGER for money (cents)
   price_cents INTEGER
 ) STRICT;

@@ -29,6 +29,6 @@ PRAGMA busy_timeout = 5000;
 -- Drastically reduces application-level errors
 ```
 
-**Note:** This is a *connection* setting, not a persistent database setting. It must be set for every new connection.
+**Note:** This is a _connection_ setting, not a persistent database setting. It must be set for every new connection.
 
 Reference: [PRAGMA busy_timeout](https://www.sqlite.org/pragma.html#pragma_busy_timeout)

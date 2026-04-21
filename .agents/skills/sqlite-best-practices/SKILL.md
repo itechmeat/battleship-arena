@@ -16,6 +16,7 @@ Comprehensive performance optimization guide for SQLite. Contains rules across m
 ## When to Apply
 
 Reference these guidelines when:
+
 - Configuring SQLite for production (WAL mode, timeouts)
 - Designing schemas (Strict tables, data types)
 - Optimizing queries and indexes
@@ -25,14 +26,14 @@ Reference these guidelines when:
 
 ## Rule Categories by Priority
 
-| Priority | Category | Impact | Prefix |
-|----------|----------|--------|--------|
-| 1 | Configuration & Pragmas | CRITICAL | `config-` |
-| 2 | Query Performance | CRITICAL | `query-` |
-| 3 | Operations & Distributed | HIGH | `ops-` |
-| 4 | Schema Design | HIGH | `schema-` |
-| 5 | Data Access Patterns | MEDIUM | `data-` |
-| 6 | JSON & Advanced | LOW | `json-` / `fts-` / `advanced-` |
+| Priority | Category                 | Impact   | Prefix                         |
+| -------- | ------------------------ | -------- | ------------------------------ |
+| 1        | Configuration & Pragmas  | CRITICAL | `config-`                      |
+| 2        | Query Performance        | CRITICAL | `query-`                       |
+| 3        | Operations & Distributed | HIGH     | `ops-`                         |
+| 4        | Schema Design            | HIGH     | `schema-`                      |
+| 5        | Data Access Patterns     | MEDIUM   | `data-`                        |
+| 6        | JSON & Advanced          | LOW      | `json-` / `fts-` / `advanced-` |
 
 ## How to Use
 
@@ -45,6 +46,7 @@ references/ops-continuous-wal.md
 ```
 
 Each rule file contains:
+
 - Brief explanation of why it matters
 - Incorrect SQL/Config example with explanation
 - Correct SQL/Config example with explanation

@@ -16,8 +16,8 @@ console.log(proc.exitCode); // 0
 const proc = Bun.spawn(["command", "arg1"], {
   cwd: "./path/to/dir",
   env: { ...process.env, FOO: "bar" },
-  timeout: 5000,           // Kill after 5s
-  killSignal: "SIGKILL",   // Signal for timeout/abort
+  timeout: 5000, // Kill after 5s
+  killSignal: "SIGKILL", // Signal for timeout/abort
   signal: abortController.signal,
   onExit(proc, exitCode, signalCode, error) {
     console.log("Exited:", exitCode);
@@ -122,17 +122,17 @@ const proc = Bun.spawn(["command"]);
 await proc.exited;
 
 // Properties after exit
-proc.exitCode;    // number | null
-proc.signalCode;  // "SIGTERM" | null
-proc.killed;      // boolean
+proc.exitCode; // number | null
+proc.signalCode; // "SIGTERM" | null
+proc.killed; // boolean
 ```
 
 ## Killing Processes
 
 ```ts
-proc.kill();          // Default signal
+proc.kill(); // Default signal
 proc.kill("SIGTERM"); // By name
-proc.kill(15);        // By number
+proc.kill(15); // By number
 ```
 
 ## Process Lifecycle
@@ -151,9 +151,9 @@ proc.ref();
 await proc.exited;
 const usage = proc.resourceUsage();
 
-console.log(usage.maxRSS);           // Max memory (bytes)
-console.log(usage.cpuTime.user);     // User CPU time (µs)
-console.log(usage.cpuTime.system);   // System CPU time (µs)
+console.log(usage.maxRSS); // Max memory (bytes)
+console.log(usage.cpuTime.user); // User CPU time (µs)
+console.log(usage.cpuTime.system); // System CPU time (µs)
 ```
 
 ## AbortSignal
@@ -175,7 +175,7 @@ controller.abort();
 ```ts
 const proc = Bun.spawn({
   cmd: ["sleep", "10"],
-  timeout: 5000,         // Kill after 5 seconds
+  timeout: 5000, // Kill after 5 seconds
   killSignal: "SIGKILL", // Signal to send
 });
 ```
@@ -269,10 +269,10 @@ await proc2.exited;
 ```ts
 const result = Bun.spawnSync(["echo", "hello"]);
 
-result.success;   // boolean
-result.exitCode;  // number
-result.stdout;    // Buffer
-result.stderr;    // Buffer
+result.success; // boolean
+result.exitCode; // number
+result.stdout; // Buffer
+result.stderr; // Buffer
 
 console.log(result.stdout.toString()); // "hello\n"
 ```

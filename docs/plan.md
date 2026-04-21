@@ -38,6 +38,7 @@ From S2 onward: a commit that introduces production code without a corresponding
 This checklist spans all four stories and is updated as work lands. A check mark means the item is both implemented and verified.
 
 ### S1 - Bootstrap
+
 - [ ] Monorepo initialized with Bun workspaces (`backend/`, `web/`, `shared/`, `infra/`).
 - [ ] TypeScript, oxlint, oxfmt configured at the root; per-workspace overrides only when required.
 - [ ] `shared/` exposes API types, outcome enum, error codes, shot schema, and board constants.
@@ -52,6 +53,7 @@ This checklist spans all four stories and is updated as work lands. A check mark
 - [ ] Off-host rsync timer is installed; first run succeeds (even with an empty snapshot).
 
 ### S2 - Game loop against the mock provider
+
 - [ ] `board/generator` produces deterministic fleets from a `YYYY-MM-DD` seed.
 - [ ] `board/renderer` produces a PNG for any board state.
 - [ ] `providers/mock` returns deterministic shots for tests and a configurable "bad model" variant.
@@ -64,6 +66,7 @@ This checklist spans all four stories and is updated as work lands. A check mark
 - [ ] Playwright smoke on staging plays a mock run to `won`.
 
 ### S3 - Real providers, pricing, budget, leaderboard, replays
+
 - [ ] `providers/openrouter`, `providers/openai`, `providers/anthropic`, `providers/google`, `providers/zai` implement the adapter interface.
 - [ ] `providers/pricing` exposes a per-exact-model-ID pricing table; `cost_usd_micros` is computed server-side.
 - [ ] `dnf_budget` is reachable and covered by a mock-provider test that simulates cumulative cost crossing the cap.
@@ -75,6 +78,7 @@ This checklist spans all four stories and is updated as work lands. A check mark
 - [ ] Playwright smoke on staging runs the mock end-to-end, hits a budget DNF, and opens a replay.
 
 ### S4 - Seed rollover, maintenance, backup drill, production cutover
+
 - [ ] UTC seed rollover behavior is covered by a test: a run started before 00:00 finishes on yesterday's seed; a run started after 00:00 uses today's.
 - [ ] Hard maintenance (Caddy flag) is verified on staging: every request returns the static 503 page.
 - [ ] Soft maintenance (`MAINTENANCE_SOFT=1` in the backend env) is verified on staging: mutating endpoints return `maintenance_soft`, reads and in-flight SSE keep working.

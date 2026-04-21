@@ -12,8 +12,8 @@ Creates lazy file reference (doesn't read immediately):
 const file = Bun.file("data.txt");
 
 // Metadata
-file.size;           // Bytes
-file.type;           // MIME type
+file.size; // Bytes
+file.type; // MIME type
 await file.exists(); // Boolean
 ```
 
@@ -22,11 +22,11 @@ await file.exists(); // Boolean
 ```typescript
 const file = Bun.file("data.txt");
 
-await file.text();        // String
-await file.json();        // Parsed JSON
-await file.bytes();       // Uint8Array
+await file.text(); // String
+await file.json(); // Parsed JSON
+await file.bytes(); // Uint8Array
 await file.arrayBuffer(); // ArrayBuffer
-await file.stream();      // ReadableStream
+await file.stream(); // ReadableStream
 ```
 
 ### File References
@@ -52,9 +52,9 @@ Bun.file("data.bin", { type: "application/octet-stream" });
 ### Standard Streams
 
 ```typescript
-Bun.stdin;   // Read-only
-Bun.stdout;  // Write
-Bun.stderr;  // Write
+Bun.stdin; // Read-only
+Bun.stdout; // Write
+Bun.stderr; // Write
 ```
 
 ## Writing Files
@@ -90,12 +90,12 @@ const writer = file.writer({ highWaterMark: 1024 * 1024 }); // 1MB buffer
 writer.write("Line 1\n");
 writer.write("Line 2\n");
 
-writer.flush();  // Force write to disk
-writer.end();    // Flush and close
+writer.flush(); // Force write to disk
+writer.end(); // Flush and close
 
 // Process lifecycle
-writer.unref();  // Allow process to exit
-writer.ref();    // Keep process alive
+writer.unref(); // Allow process to exit
+writer.ref(); // Keep process alive
 ```
 
 ## Delete Files

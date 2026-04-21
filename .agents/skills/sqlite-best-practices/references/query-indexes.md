@@ -27,6 +27,7 @@ SELECT * FROM users WHERE email = 'user@example.com';
 ```
 
 **Rules for Composite Indexes:**
+
 1.  **Left-to-Right:** `(a, b)` can be used for `a` or `a AND b`, but not just `b`.
 2.  **Stop at Range:** `a = 1 AND b > 5` uses both parts. `a > 1 AND b = 5` only uses `a`.
 

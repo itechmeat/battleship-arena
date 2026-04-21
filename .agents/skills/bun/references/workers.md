@@ -50,8 +50,8 @@ const worker = new Worker(URL.createObjectURL(file));
 
 ```ts
 const worker = new Worker("./worker.ts", {
-  ref: false,           // Don't keep main process alive
-  smol: true,           // Reduced memory mode
+  ref: false, // Don't keep main process alive
+  smol: true, // Reduced memory mode
   preload: ["./sentry.js"], // Load modules before worker starts
 });
 ```
@@ -207,10 +207,7 @@ const worker = new Worker("./worker.ts", {
 Share data between threads:
 
 ```ts
-import {
-  setEnvironmentData,
-  getEnvironmentData,
-} from "worker_threads";
+import { setEnvironmentData, getEnvironmentData } from "worker_threads";
 
 // Main thread
 setEnvironmentData("config", { apiUrl: "https://api.example.com" });
@@ -243,9 +240,7 @@ process.on("worker", (worker) => {
 
 ```ts
 // main.ts
-const pool = Array.from({ length: 4 }, () =>
-  new Worker("./worker.ts")
-);
+const pool = Array.from({ length: 4 }, () => new Worker("./worker.ts"));
 
 let current = 0;
 

@@ -19,13 +19,14 @@ Standard cron-based backups (snapshotting) leave a window of potential data loss
 
 **Correct (Continuous WAL Streaming):**
 
-*Concept:* Use a background process or sidecar to monitor the SQLite WAL file. As pages are written to the WAL, immediately ship them to object storage (like S3) or a separate backup volume.
+_Concept:_ Use a background process or sidecar to monitor the SQLite WAL file. As pages are written to the WAL, immediately ship them to object storage (like S3) or a separate backup volume.
 
 ```text
 [SQLite] writes -> [WAL File] -> [Streaming Tool] -> [Object Storage]
 ```
 
 **Benefits:**
+
 1.  **RPO ~1 second:** Data is backed up almost instantly.
 2.  **Point-in-Time Recovery:** Restore the database to any specific transaction timestamp.
 3.  **Low Overhead:** Reads from the WAL are generally lightweight compared to full database locks.

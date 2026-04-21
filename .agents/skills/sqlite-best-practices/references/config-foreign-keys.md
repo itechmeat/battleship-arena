@@ -7,7 +7,7 @@ tags: pragma, foreign-keys, integrity
 
 ## Enable Foreign Key Constraints
 
-By default, SQLite parses foreign key definitions but *does not enforce* them. You must explicitly enable enforcement.
+By default, SQLite parses foreign key definitions but _does not enforce_ them. You must explicitly enable enforcement.
 
 **Incorrect (constraints ignored):**
 
@@ -30,6 +30,6 @@ INSERT INTO child (parent_id) VALUES (999);
 -- Error: FOREIGN KEY constraint failed
 ```
 
-**Note:** This is a *connection* setting (unless using specific compile-time options). Set it on every connection.
+**Note:** This is a _connection_ setting (unless using specific compile-time options). Set it on every connection.
 
 Reference: [Foreign Keys](https://www.sqlite.org/foreignkeys.html)

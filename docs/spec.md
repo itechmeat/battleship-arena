@@ -39,21 +39,21 @@ Two independent systemd units run the same code with different environment varia
 
 The versions below are **minimum floors**, not exact pins. Per the version policy in `CLAUDE.md`, the project pins to the latest stable release that is greater than or equal to the floor. Downgrade is forbidden. Upgrade is encouraged and should happen in the same PR that bumps the floor.
 
-| Tool           | Role                                                 | Minimum version |
-|----------------|------------------------------------------------------|-----------------|
-| Bun            | JS/TS runtime, package manager, test runner, bundler | 1.3.12          |
-| Hono           | Backend HTTP framework                               | 4.12.14         |
-| Drizzle ORM    | Type-safe SQL over `bun:sqlite`                      | 0.45.2          |
-| Drizzle Kit    | Migration generation and runner                      | 0.31.10         |
-| TypeScript     | Source language                                      | 6.0.2           |
-| Astro          | Frontend framework / static shell                    | 6.1.7           |
-| Solid.js       | Interactive islands on Astro                         | 1.9.12          |
-| CSS Modules    | Component-scoped styles                              | (bundled)       |
-| oxlint         | Linter                                               | 1.60.0          |
-| oxfmt          | Formatter                                            | 0.45.0          |
-| Playwright     | E2E tests against staging only                       | 1.59.1          |
-| sqlite3 (CLI)  | Backup driver (`VACUUM INTO`)                        | 3.45            |
-| Caddy          | Reverse proxy / TLS                                  | 2.x             |
+| Tool          | Role                                                 | Minimum version |
+| ------------- | ---------------------------------------------------- | --------------- |
+| Bun           | JS/TS runtime, package manager, test runner, bundler | 1.3.12          |
+| Hono          | Backend HTTP framework                               | 4.12.14         |
+| Drizzle ORM   | Type-safe SQL over `bun:sqlite`                      | 0.45.2          |
+| Drizzle Kit   | Migration generation and runner                      | 0.31.10         |
+| TypeScript    | Source language                                      | 6.0.2           |
+| Astro         | Frontend framework / static shell                    | 6.1.7           |
+| Solid.js      | Interactive islands on Astro                         | 1.9.12          |
+| CSS Modules   | Component-scoped styles                              | (bundled)       |
+| oxlint        | Linter                                               | 1.60.0          |
+| oxfmt         | Formatter                                            | 0.45.0          |
+| Playwright    | E2E tests against staging only                       | 1.59.1          |
+| sqlite3 (CLI) | Backup driver (`VACUUM INTO`)                        | 3.45            |
+| Caddy         | Reverse proxy / TLS                                  | 2.x             |
 
 Before any `bun add`, `bun install`, or pin bump, the exact latest stable must be verified from the official source (npm, GitHub Releases, vendor docs) and pinned if newer than the floor.
 
@@ -181,46 +181,46 @@ SQLite via `bun:sqlite`, accessed through Drizzle ORM for type-safe queries. One
 
 #### 5.1.1 `runs`
 
-| Column              | Type    | Notes                                                         |
-|---------------------|---------|---------------------------------------------------------------|
-| `id`                | TEXT PK | ULID, generated server-side.                                  |
-| `seed_date`         | TEXT    | `YYYY-MM-DD` UTC.                                             |
-| `provider_id`       | TEXT    | Short slug (`openai`, `anthropic`, `google`, `mock`).         |
-| `model_id`          | TEXT    | Exact provider identifier (for example `gpt-4o-2024-11-20`).  |
-| `display_name`      | TEXT    | Provider's human-readable name at run time.                   |
-| `started_at`        | INTEGER | Unix ms.                                                      |
-| `ended_at`          | INTEGER | Unix ms, nullable while running.                              |
-| `outcome`           | TEXT    | One of the values in section 4.2, nullable while running.     |
-| `shots_fired`       | INTEGER | Legal shots applied (excludes schema errors).                 |
-| `hits`              | INTEGER |                                                               |
-| `schema_errors`       | INTEGER | Cumulative schema errors (shape/parse failures) over the run. Only the *consecutive* count gates `dnf_schema_errors`. |
-| `invalid_coordinates` | INTEGER | Cumulative count of duplicate-shot or out-of-range turns. |
-| `duration_ms`       | INTEGER | Wall-clock from first request to terminal state.              |
-| `tokens_in`         | INTEGER |                                                               |
-| `tokens_out`        | INTEGER |                                                               |
-| `reasoning_tokens`  | INTEGER | Nullable when the provider does not report it.                |
-| `cost_usd_micros`   | INTEGER | Cost in USD x 1,000,000 (integer math avoids FP drift).       |
-| `budget_usd_micros` | INTEGER | User-declared cap at start, nullable means no cap.            |
-| `client_session`    | TEXT    | Opaque per-session token; never a user identity.              |
+| Column                | Type    | Notes                                                                                                                 |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | TEXT PK | ULID, generated server-side.                                                                                          |
+| `seed_date`           | TEXT    | `YYYY-MM-DD` UTC.                                                                                                     |
+| `provider_id`         | TEXT    | Short slug (`openai`, `anthropic`, `google`, `mock`).                                                                 |
+| `model_id`            | TEXT    | Exact provider identifier (for example `gpt-4o-2024-11-20`).                                                          |
+| `display_name`        | TEXT    | Provider's human-readable name at run time.                                                                           |
+| `started_at`          | INTEGER | Unix ms.                                                                                                              |
+| `ended_at`            | INTEGER | Unix ms, nullable while running.                                                                                      |
+| `outcome`             | TEXT    | One of the values in section 4.2, nullable while running.                                                             |
+| `shots_fired`         | INTEGER | Legal shots applied (excludes schema errors).                                                                         |
+| `hits`                | INTEGER |                                                                                                                       |
+| `schema_errors`       | INTEGER | Cumulative schema errors (shape/parse failures) over the run. Only the _consecutive_ count gates `dnf_schema_errors`. |
+| `invalid_coordinates` | INTEGER | Cumulative count of duplicate-shot or out-of-range turns.                                                             |
+| `duration_ms`         | INTEGER | Wall-clock from first request to terminal state.                                                                      |
+| `tokens_in`           | INTEGER |                                                                                                                       |
+| `tokens_out`          | INTEGER |                                                                                                                       |
+| `reasoning_tokens`    | INTEGER | Nullable when the provider does not report it.                                                                        |
+| `cost_usd_micros`     | INTEGER | Cost in USD x 1,000,000 (integer math avoids FP drift).                                                               |
+| `budget_usd_micros`   | INTEGER | User-declared cap at start, nullable means no cap.                                                                    |
+| `client_session`      | TEXT    | Opaque per-session token; never a user identity.                                                                      |
 
 #### 5.1.2 `run_shots`
 
-| Column             | Type    | Notes                                                                |
-|--------------------|---------|----------------------------------------------------------------------|
-| `run_id`           | TEXT    | FK `runs.id`.                                                        |
-| `idx`              | INTEGER | 0-based position in the run.                                         |
-| `row`              | INTEGER | Nullable when the row value cannot be parsed or is out of range.     |
-| `col`              | INTEGER | Nullable when the col value cannot be parsed or is out of range.     |
-| `result`           | TEXT    | `hit` \| `miss` \| `sunk` \| `schema_error` \| `invalid_coordinate`. |
+| Column             | Type    | Notes                                                                                                                                                                                                                              |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run_id`           | TEXT    | FK `runs.id`.                                                                                                                                                                                                                      |
+| `idx`              | INTEGER | 0-based position in the run.                                                                                                                                                                                                       |
+| `row`              | INTEGER | Nullable when the row value cannot be parsed or is out of range.                                                                                                                                                                   |
+| `col`              | INTEGER | Nullable when the col value cannot be parsed or is out of range.                                                                                                                                                                   |
+| `result`           | TEXT    | `hit` \| `miss` \| `sunk` \| `schema_error` \| `invalid_coordinate`.                                                                                                                                                               |
 | `raw_response`     | TEXT    | Reasoning/thinking blocks stripped first, then the final user-visible response serialized, then truncated to 8 KiB. Without the strip-first step, an 8 KiB cap on a reasoning model fills with thinking and loses the actual shot. |
-| `reasoning_text`   | TEXT    | Parsed `reasoning` field if any, truncated to 2 KiB.                 |
-| `tokens_in`        | INTEGER |                                                                      |
-| `tokens_out`       | INTEGER |                                                                      |
-| `reasoning_tokens` | INTEGER | Nullable.                                                            |
-| `cost_usd_micros`  | INTEGER |                                                                      |
-| `duration_ms`      | INTEGER | Wall-clock of the provider call.                                     |
-| `created_at`       | INTEGER | Unix ms.                                                             |
-| PRIMARY KEY        |         | `(run_id, idx)`.                                                     |
+| `reasoning_text`   | TEXT    | Parsed `reasoning` field if any, truncated to 2 KiB.                                                                                                                                                                               |
+| `tokens_in`        | INTEGER |                                                                                                                                                                                                                                    |
+| `tokens_out`       | INTEGER |                                                                                                                                                                                                                                    |
+| `reasoning_tokens` | INTEGER | Nullable.                                                                                                                                                                                                                          |
+| `cost_usd_micros`  | INTEGER |                                                                                                                                                                                                                                    |
+| `duration_ms`      | INTEGER | Wall-clock of the provider call.                                                                                                                                                                                                   |
+| `created_at`       | INTEGER | Unix ms.                                                                                                                                                                                                                           |
+| PRIMARY KEY        |         | `(run_id, idx)`.                                                                                                                                                                                                                   |
 
 Indexes: `runs(seed_date, outcome)`, `runs(model_id, outcome, shots_fired)`, `run_shots(run_id, idx)`.
 
@@ -245,7 +245,7 @@ All endpoints live under `/api`. Request and response bodies are JSON unless not
 Every non-2xx response has the shape:
 
 ```json
-{ "error": { "code": "snake_case_identifier", "message": "Human-readable summary.", "detail": { } } }
+{ "error": { "code": "snake_case_identifier", "message": "Human-readable summary.", "detail": {} } }
 ```
 
 - `code` is drawn from a closed set (for example `invalid_input`, `not_found`, `run_terminal`, `provider_unavailable`, `budget_required`, `rate_limited`, `internal`).

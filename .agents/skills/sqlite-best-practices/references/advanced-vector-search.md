@@ -23,7 +23,7 @@ CREATE TABLE items (
 
 **Correct (Using Vector Extensions):**
 
-*Concept:* Load a vector search extension (e.g., `sqlite-vss` or similar) to enable vector indexing (HNSW or similar) and distance functions.
+_Concept:_ Load a vector search extension (e.g., `sqlite-vss` or similar) to enable vector indexing (HNSW or similar) and distance functions.
 
 ```sql
 -- Virtual table provided by extension
@@ -39,6 +39,7 @@ LIMIT 10;
 ```
 
 **Benefits:**
+
 1.  **Simplified Stack:** No need to manage a separate vector database (Pinecone, Milvus, etc.).
 2.  **ACID compliance:** Vector data lives alongside relational data.
 3.  **Joins:** You can join vector search results directly with other SQL tables in a single query.

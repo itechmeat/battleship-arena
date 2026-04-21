@@ -34,12 +34,12 @@ await fetch(req);
 ## Response Body
 
 ```typescript
-response.text();        // Promise<string>
-response.json();        // Promise<any>
-response.formData();    // Promise<FormData>
-response.bytes();       // Promise<Uint8Array>
+response.text(); // Promise<string>
+response.json(); // Promise<any>
+response.formData(); // Promise<FormData>
+response.bytes(); // Promise<Uint8Array>
 response.arrayBuffer(); // Promise<ArrayBuffer>
-response.blob();        // Promise<Blob>
+response.blob(); // Promise<Blob>
 ```
 
 ## Streaming

@@ -101,11 +101,11 @@ server.publish("chat-room", "Server announcement!");
 ### Subscription Methods
 
 ```typescript
-ws.subscribe("topic");           // Join topic
-ws.unsubscribe("topic");         // Leave topic
-ws.publish("topic", message);    // Send to others
-ws.isSubscribed("topic");        // Check subscription
-ws.subscriptions;                // Get all topics
+ws.subscribe("topic"); // Join topic
+ws.unsubscribe("topic"); // Leave topic
+ws.publish("topic", message); // Send to others
+ws.isSubscribed("topic"); // Check subscription
+ws.subscriptions; // Get all topics
 server.subscriberCount("topic"); // Count subscribers
 ```
 
@@ -127,9 +127,9 @@ ws.send("Hello", true); // Compress this message
 ```typescript
 Bun.serve({
   websocket: {
-    idleTimeout: 120,              // Seconds (default: 120)
+    idleTimeout: 120, // Seconds (default: 120)
     maxPayloadLength: 16 * 1024 * 1024, // Bytes (default: 16MB)
-    backpressureLimit: 1024 * 1024,     // Bytes (default: 1MB)
+    backpressureLimit: 1024 * 1024, // Bytes (default: 1MB)
     closeOnBackpressureLimit: false,
     sendPings: true,
     publishToSelf: false,
@@ -154,7 +154,7 @@ const socket = new WebSocket("ws://localhost:3000");
 // Bun extension: custom headers
 const socket = new WebSocket("ws://localhost:3000", {
   headers: {
-    "Authorization": "Bearer token",
+    Authorization: "Bearer token",
   },
 });
 

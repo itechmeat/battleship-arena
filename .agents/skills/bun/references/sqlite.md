@@ -111,15 +111,12 @@ const insertMany = db.transaction((users) => {
 });
 
 // Auto-commit on success, rollback on error
-const count = insertMany([
-  { $name: "Alice" },
-  { $name: "Bob" },
-]);
+const count = insertMany([{ $name: "Alice" }, { $name: "Bob" }]);
 
 // Transaction types
-insertMany.deferred(users);   // BEGIN DEFERRED
-insertMany.immediate(users);  // BEGIN IMMEDIATE
-insertMany.exclusive(users);  // BEGIN EXCLUSIVE
+insertMany.deferred(users); // BEGIN DEFERRED
+insertMany.immediate(users); // BEGIN IMMEDIATE
+insertMany.exclusive(users); // BEGIN EXCLUSIVE
 ```
 
 ## WAL Mode
@@ -141,8 +138,8 @@ db.run("INSERT INTO users (name) VALUES (?)", ["John"]);
 ## Closing
 
 ```typescript
-db.close();        // Allow pending queries to finish
-db.close(true);    // Throw if pending queries
+db.close(); // Allow pending queries to finish
+db.close(true); // Throw if pending queries
 
 // Using statement (auto-close)
 {

@@ -302,6 +302,7 @@ flowchart TD
 Used for binary swaps, schema changes, restore drills, and any moment when the backend should not be reachable.
 
 Runbook:
+
 1. `touch /etc/battleship-arena/maintenance.on` (or run `infra/scripts/maintenance-on.sh`).
 2. Perform the maintenance work (rsync, `systemctl restart`, `restore.sh`, etc.).
 3. `rm /etc/battleship-arena/maintenance.on` (or `infra/scripts/maintenance-off.sh`).
@@ -481,6 +482,7 @@ A single `Caddyfile` serves both environments on distinct hostnames:
 Three GitHub Actions workflows, all running on GitHub-hosted runners.
 
 **`pr.yml`** - triggered on pull-requests targeting `main`:
+
 - Install Bun pinned to the spec floor (or higher).
 - `bun install --frozen-lockfile`.
 - `oxlint`, `oxfmt --check`.
@@ -490,6 +492,7 @@ Three GitHub Actions workflows, all running on GitHub-hosted runners.
 - No deploy.
 
 **`deploy-staging.yml`** - triggered on push to `main`:
+
 - Same build as above.
 - Package: tar the `backend/dist/` output and the `web/dist/` output.
 - Copy via `rsync` over SSH to the host's staging paths.
@@ -538,8 +541,8 @@ Rollback: re-run `deploy-production.yml` against the previous tag. Because the d
 - **Session token.** `client_session` is an opaque, HttpOnly, SameSite=Strict, Secure cookie. It exists to de-duplicate same-session reruns on the leaderboard. It is never an identity and is not joinable to a user.
 - **CSRF.** No cookies carry authority for mutating endpoints, so classical CSRF does not apply. The `POST /api/runs` request must supply an API key in the body, which no cross-site form submission can inject.
 - **Rate limiting.** Two layers, both targeting `POST /api/runs` only (the single expensive write); all other endpoints are cheap reads and are not rate-limited at the proxy in MVP.
-  - *Caddy per-IP rate.* At most N requests per second per source IP, rejected with `429` at the proxy before reaching the backend.
-  - *Backend per-session concurrency cap.* At most 10 simultaneously-active runs per `client_session`; the 11th returns `429 { code: too_many_active_runs }`. This prevents a single tab-spamming client from occupying the entire active-run registry.
+  - _Caddy per-IP rate._ At most N requests per second per source IP, rejected with `429` at the proxy before reaching the backend.
+  - _Backend per-session concurrency cap._ At most 10 simultaneously-active runs per `client_session`; the 11th returns `429 { code: too_many_active_runs }`. This prevents a single tab-spamming client from occupying the entire active-run registry.
 - **File permissions.**
   - `project.db` and `project-staging.db`: `0600`, owned by the `battleship` user.
   - `/etc/battleship-arena/maintenance.on`: created by root (or by `sudo` entry for the deploy user), readable by Caddy.

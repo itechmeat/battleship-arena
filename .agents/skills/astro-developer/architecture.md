@@ -312,10 +312,10 @@ Runtime:
 **File**: `packages/astro/src/content/consts.ts`
 
 ```typescript
-DATA_STORE_FILE = '.astro/data-store.json';
-COLLECTIONS_MANIFEST_FILE = 'collections-manifest.json';
-MODULES_IMPORTS_FILE = 'modules-imports.json';
-ASSET_IMPORTS_FILE = 'asset-imports.json';
+DATA_STORE_FILE = ".astro/data-store.json";
+COLLECTIONS_MANIFEST_FILE = "collections-manifest.json";
+MODULES_IMPORTS_FILE = "modules-imports.json";
+ASSET_IMPORTS_FILE = "asset-imports.json";
 ```
 
 ### Live Collections (Astro 5+)

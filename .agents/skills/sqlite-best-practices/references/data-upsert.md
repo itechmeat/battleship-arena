@@ -24,9 +24,9 @@ if (exists) {
 **Correct (Atomic UPSERT):**
 
 ```sql
-INSERT INTO counter (key, value) 
+INSERT INTO counter (key, value)
 VALUES ('hits', 1)
-ON CONFLICT(key) 
+ON CONFLICT(key)
 DO UPDATE SET value = value + 1;
 ```
 

@@ -57,7 +57,7 @@ globalThis.count = count;
 export default {
   fetch() {
     return new Response(`Count: ${++count}`);
-  }
+  },
 };
 ```
 
@@ -116,7 +116,7 @@ bun --inspect index.ts
 
 ```typescript
 const inspector = Bun.inspector;
-inspector.url;               // WebSocket URL
+inspector.url; // WebSocket URL
 inspector.open({ port: 9229 });
 inspector.close();
 

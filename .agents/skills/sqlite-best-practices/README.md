@@ -7,9 +7,11 @@ A comprehensive guide for optimizing SQLite databases, focusing on performance, 
 ```bash
 npx skills add erayack/sqlite-best-practices
 ```
+
 ## Overview
 
 This skill provides specific rules and patterns for:
+
 - **Configuration:** Tuning PRAGMAs for concurrency (WAL mode) and safety.
 - **Query Performance:** Effective indexing strategies and query planning.
 - **Schema Design:** Using `STRICT` tables, correct storage classes, and generated columns.

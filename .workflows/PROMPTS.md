@@ -10,3 +10,5 @@ Suggest a branch name and a commit message, using the commits skill without exce
 
 Suggest a commit message for this fix, using the commits skill.
 No deep analysis, no extra queries - you remember what you just fixed. Do it quickly.
+
+## Prompts log

@@ -7,7 +7,7 @@ tags: pragma, wal, concurrency, performance
 
 ## Enable WAL Mode for Concurrency
 
-The default rollback journal mode allows only one reader *or* one writer at a time. Write-Ahead Logging (WAL) allows many readers to operate concurrently with one writer.
+The default rollback journal mode allows only one reader _or_ one writer at a time. Write-Ahead Logging (WAL) allows many readers to operate concurrently with one writer.
 
 **Incorrect (default rollback journal):**
 
