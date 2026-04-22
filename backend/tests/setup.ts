@@ -1,3 +1,11 @@
+const isGuardProbe = process.argv.some((arg) =>
+  arg.endsWith("backend/tests/fixtures/guard-probe.ts"),
+);
+
+if (!isGuardProbe) {
+  process.env.DATABASE_PATH ??= ":memory:";
+}
+
 const databasePath = process.env.DATABASE_PATH;
 
 const isSafeDatabasePath =

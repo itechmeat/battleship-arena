@@ -245,7 +245,13 @@ All endpoints live under `/api`. Request and response bodies are JSON unless not
 Every non-2xx response has the shape:
 
 ```json
-{ "error": { "code": "snake_case_identifier", "message": "Human-readable summary.", "detail": {} } }
+{
+  "error": {
+    "code": "snake_case_identifier",
+    "message": "Human-readable summary.",
+    "detail": {}
+  }
+}
 ```
 
 - `code` is drawn from a closed set (for example `invalid_input`, `not_found`, `run_terminal`, `provider_unavailable`, `budget_required`, `rate_limited`, `internal`).
@@ -273,7 +279,12 @@ interface ProviderCallInput {
   boardPng: Uint8Array;
   shipsRemaining: readonly string[];
   systemPrompt: string;
-  priorShots: readonly { row: number; col: number; result: "hit" | "miss" | "sunk" }[];
+  priorShots: readonly {
+    row: number;
+    col: number;
+    result: "hit" | "miss" | "sunk";
+  }[];
+  seedDate: string;
 }
 
 interface ProviderCallOutput {

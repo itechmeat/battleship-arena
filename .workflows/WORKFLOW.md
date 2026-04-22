@@ -4,7 +4,7 @@
 
 - [x] 🦊 Claude Code
 
-Let's run a brainstorm for implementing story S1 from the plan in docs/plan.md.
+Let's run a brainstorm for implementing story S2 from the plan in docs/plan.md.
 The project information is described in sufficient detail in the documents inside the docs folder.
 When you ask questions, always attach well-argued recommendations. After I pick an option, record the reasoning in the resulting brainstorm file as well: it must stay in the document.
 Remember: right now we are not writing code, we are planning.
@@ -15,8 +15,8 @@ ultrathink
 
 - [x] 🤖 Github Copilot
 
-docs/superpowers/plans/2026-04-20-s1a-bootstrap.md
-docs/superpowers/specs/2026-04-20-s1-bootstrap-design.md
+docs/superpowers/specs/2026-04-21-s2a-game-loop-mock-design.md
+docs/superpowers/plans/2026-04-21-s2a-game-loop-mock.md
 Review this plan; if you have criticism or improvement ideas - tell me.
 Do not propose fixes and do not fix anything yourself, your job is review only.
 If ask_report returns an empty response - just repeat your report again, up to 3 times. Always answer in English.
@@ -28,8 +28,8 @@ ultrathink
 
 - [x] 🦊 Claude Code
 
-docs/superpowers/plans/2026-04-20-s1a-bootstrap.md
-docs/superpowers/specs/2026-04-20-s1-bootstrap-design.md
+docs/superpowers/specs/2026-04-21-s2a-game-loop-mock-design.md
+docs/superpowers/plans/2026-04-21-s2a-game-loop-mock.md
 Based on this plan, let's start a new change following the openspec workflow.
 Produce all artifacts autonomously.
 If needed, spawn a dedicated agent per file to speed things up.
@@ -74,11 +74,11 @@ ultrathink
 I have a review of the implementation of the current openspec change; the decision to follow the reviewer's recommendations or not is yours.
 ask_report is required.
 
-- [ ] 🦊 Claude Code
+- [x] 🦊 Claude Code
 
 Archive the current openspec change.
 If needed, without asking me, sync delta specs into main specs.
-At the end, do not forget to propose a branch name and a commit message, using the commits skill without exception. Do not forget about this!!!
+At the end, do not forget to propose a branch name and a commit message, using the commits skill without exception. Do not forget about this!
 ultrathink
 
 ## CodeRabbit

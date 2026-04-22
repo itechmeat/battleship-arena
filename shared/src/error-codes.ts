@@ -1,7 +1,9 @@
 export const ERROR_CODES = [
   "invalid_input",
   "not_found",
+  "run_not_found",
   "run_terminal",
+  "already_aborted",
   "provider_unavailable",
   "budget_required",
   "rate_limited",

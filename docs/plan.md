@@ -39,18 +39,18 @@ This checklist spans all four stories and is updated as work lands. A check mark
 
 ### S1 - Bootstrap
 
-- [ ] Monorepo initialized with Bun workspaces (`backend/`, `web/`, `shared/`, `infra/`).
-- [ ] TypeScript, oxlint, oxfmt configured at the root; per-workspace overrides only when required.
-- [ ] `shared/` exposes API types, outcome enum, error codes, shot schema, and board constants.
-- [ ] `backend/` has a Hono app with `/api/health` returning `200`.
-- [ ] `web/` has an Astro page at `/` with the PWA manifest and a trivial service worker caching only the static shell.
-- [ ] `backend/tests/setup.ts` installs the `DATABASE_PATH` guard; `withTempDatabase` is implemented and covered.
-- [ ] Drizzle Kit migrations are wired (`backend/db/schema.ts`, `backend/db/migrations/`); startup applies pending migrations inside a transaction before opening the HTTP listener.
-- [ ] CI workflow `pr.yml` runs lint, format check, typecheck, `bun test`, and build on every PR.
-- [ ] CI workflow `deploy-staging.yml` deploys on push to `main`, restarts the staging unit, and health-checks.
-- [ ] Caddy serves the static build and proxies `/api/*` on `staging.arena.example`.
-- [ ] Both systemd units (`battleship-arena-staging.service` and the backup timers) exist, are enabled, and survive a host reboot.
-- [ ] Off-host rsync timer is installed; first run succeeds (even with an empty snapshot).
+- [x] Monorepo initialized with Bun workspaces (`backend/`, `web/`, `shared/`, `infra/`).
+- [x] TypeScript, oxlint, oxfmt configured at the root; per-workspace overrides only when required.
+- [x] `shared/` exposes API types, outcome enum, error codes, shot schema, and board constants.
+- [x] `backend/` has a Hono app with `/api/health` returning `200`.
+- [x] `web/` has an Astro page at `/` with the PWA manifest and a trivial service worker caching only the static shell.
+- [x] `backend/tests/setup.ts` installs the `DATABASE_PATH` guard; `withTempDatabase` is implemented and covered.
+- [x] Drizzle Kit migrations are wired (`backend/db/schema.ts`, `backend/db/migrations/`); startup applies pending migrations inside a transaction before opening the HTTP listener.
+- [x] CI workflow `pr.yml` runs lint, format check, typecheck, `bun test`, and build on every PR.
+- [x] CI workflow `deploy-staging.yml` deploys on push to `main`, restarts the staging unit, and health-checks.
+- [x] Caddy serves the static build and proxies `/api/*` on `staging.arena.example`.
+- [x] Both systemd units (`battleship-arena-staging.service` and the backup timers) exist, are enabled, and survive a host reboot.
+- [x] Off-host rsync timer is installed; first run succeeds (even with an empty snapshot).
 
 ### S2 - Game loop against the mock provider
 

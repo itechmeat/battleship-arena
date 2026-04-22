@@ -1,9 +1,13 @@
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const distDirectory = fileURLToPath(new URL("../dist/", import.meta.url));
 const serviceWorkerEntry = fileURLToPath(new URL("../src/pwa/sw.ts", import.meta.url));
+const dynamicRunShellSource = fileURLToPath(
+  new URL("../dist/runs/__dynamic__/index.html", import.meta.url),
+);
+const dynamicRunShellTarget = fileURLToPath(new URL("../dist/runs/index.html", import.meta.url));
 
 const SHELL_EXTENSIONS = new Set([
   ".css",
@@ -37,6 +41,16 @@ async function collectFiles(directory: string): Promise<string[]> {
   return nestedFiles.flat();
 }
 
+async function ensureDynamicRunShell() {
+  const source = Bun.file(dynamicRunShellSource);
+  if (!(await source.exists())) {
+    throw new Error("Missing dynamic run shell source in dist/runs/__dynamic__/index.html");
+  }
+
+  await mkdir(join(distDirectory, "runs"), { recursive: true });
+  await Bun.write(dynamicRunShellTarget, await source.text());
+}
+
 function toShellPath(filePath: string, rootDirectory: string): string {
   const relativePath = relative(rootDirectory, filePath).split(sep).join("/");
 
@@ -50,6 +64,8 @@ function toShellPath(filePath: string, rootDirectory: string): string {
 
   return `/${relativePath}`;
 }
+
+await ensureDynamicRunShell();
 
 const outputFiles = await collectFiles(distDirectory);
 const shellManifest = outputFiles
