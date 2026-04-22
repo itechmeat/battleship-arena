@@ -11,6 +11,7 @@ test("bootstrap opens the database, migrates, and serves /api/health", async () 
     port: 0,
     maintenanceSoft: false,
     shutdownGraceSec: 300,
+    mockTurnDelayMs: 0,
     version: "0.1.0",
     commitSha: "abc123",
   });
@@ -49,6 +50,7 @@ test("bootstrap rejects an unreachable database path", async () => {
       port: 0,
       maintenanceSoft: false,
       shutdownGraceSec: 300,
+      mockTurnDelayMs: 0,
       version: "0.1.0",
       commitSha: "unknown",
     }),

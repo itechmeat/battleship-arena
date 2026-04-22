@@ -18,6 +18,7 @@ describe("loadConfig", () => {
       port: 9000,
       maintenanceSoft: true,
       shutdownGraceSec: 45,
+      mockTurnDelayMs: 150,
       version: "9.9.9",
       commitSha: "abc123",
     });
@@ -33,6 +34,7 @@ describe("loadConfig", () => {
 
     expect(config.port).toBe(8081);
     expect(config.shutdownGraceSec).toBe(300);
+    expect(config.mockTurnDelayMs).toBe(150);
     expect(config.maintenanceSoft).toBe(false);
     expect(config.commitSha).toBe("unknown");
     expect(config.version).toBe("0.1.0");
@@ -59,5 +61,14 @@ describe("loadConfig", () => {
         SHUTDOWN_GRACE_SEC: "-1",
       }),
     ).toThrow("SHUTDOWN_GRACE_SEC");
+  });
+
+  test("rejects a negative MOCK_TURN_DELAY_MS", () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_PATH: "/tmp/bsa-test-delay.db",
+        MOCK_TURN_DELAY_MS: "-1",
+      }),
+    ).toThrow("MOCK_TURN_DELAY_MS");
   });
 });

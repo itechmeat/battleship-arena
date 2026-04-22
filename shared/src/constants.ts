@@ -12,4 +12,9 @@ export const TOTAL_SHIP_CELLS = FLEET.reduce((acc, ship) => acc + ship.length, 0
 
 export const SHOT_CAP = 100;
 
-export const CONSECUTIVE_SCHEMA_ERROR_LIMIT = 5;
+export const SCHEMA_ERROR_DNF_THRESHOLD = 5;
+export const RING_CAPACITY = 200;
+export const SSE_HEARTBEAT_MS = 25_000;
+export const MOCK_TURN_DELAY_MS_DEFAULT = 150;
+
+export const CONSECUTIVE_SCHEMA_ERROR_LIMIT = SCHEMA_ERROR_DNF_THRESHOLD;

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@battleship-arena/shared": "workspace:*",
+    "@resvg/resvg-js": "2.6.2",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.14"
   },

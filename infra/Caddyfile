@@ -33,6 +33,12 @@ arena.example {
   @immutable path /_astro/*
   header @immutable Cache-Control "public, max-age=31536000, immutable"
 
+  @run_shell path /runs /runs/*
+  handle @run_shell {
+    try_files {path} {path}/ /runs/index.html
+    file_server
+  }
+
   file_server
 }
 
@@ -54,6 +60,12 @@ staging.arena.example {
 
   @immutable path /_astro/*
   header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+  @run_shell path /runs /runs/*
+  handle @run_shell {
+    try_files {path} {path}/ /runs/index.html
+    file_server
+  }
 
   file_server
 }

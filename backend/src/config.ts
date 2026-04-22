@@ -5,6 +5,7 @@ export interface AppConfig {
   port: number;
   maintenanceSoft: boolean;
   shutdownGraceSec: number;
+  mockTurnDelayMs: number;
   version: string;
   commitSha: string;
 }
@@ -23,6 +24,7 @@ type EnvMap = Record<string, string | undefined>;
 
 const DEFAULT_PORT = 8081;
 const DEFAULT_SHUTDOWN_GRACE_SEC = 300;
+const DEFAULT_MOCK_TURN_DELAY_MS = 150;
 
 function readRequiredString(env: EnvMap, key: string): string {
   const value = env[key]?.trim();
@@ -75,6 +77,7 @@ export function loadConfig(env: EnvMap): AppConfig {
     port: readPositiveInteger(env, "PORT", DEFAULT_PORT),
     maintenanceSoft: env.MAINTENANCE_SOFT === "true",
     shutdownGraceSec: readNonNegativeInteger(env, "SHUTDOWN_GRACE_SEC", DEFAULT_SHUTDOWN_GRACE_SEC),
+    mockTurnDelayMs: readNonNegativeInteger(env, "MOCK_TURN_DELAY_MS", DEFAULT_MOCK_TURN_DELAY_MS),
     version,
     commitSha,
   };
