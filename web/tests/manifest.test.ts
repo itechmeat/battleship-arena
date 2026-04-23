@@ -23,3 +23,19 @@ test("manifest.webmanifest declares the required PWA contract", async () => {
   expect(manifest.icons?.length ?? 0).toBeGreaterThanOrEqual(3);
   expect(manifest.icons?.some((icon) => icon.purpose === "maskable")).toBe(true);
 });
+
+test("astro dev proxies /api requests to the backend", async () => {
+  const config = (await import("../astro.config.mjs")).default as {
+    vite?: {
+      plugins?: Array<{ name?: string }>;
+      server?: {
+        proxy?: Record<string, { target?: string }>;
+      };
+    };
+  };
+
+  expect(config.vite?.server?.proxy?.["/api"]?.target).toBe("http://127.0.0.1:8081");
+  expect(config.vite?.plugins?.some((plugin) => plugin.name === "local-run-shell-rewrite")).toBe(
+    true,
+  );
+});

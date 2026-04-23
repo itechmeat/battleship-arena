@@ -54,16 +54,16 @@ This checklist spans all four stories and is updated as work lands. A check mark
 
 ### S2 - Game loop against the mock provider
 
-- [ ] `board/generator` produces deterministic fleets from a `YYYY-MM-DD` seed.
-- [ ] `board/renderer` produces a PNG for any board state.
-- [ ] `providers/mock` returns deterministic shots for tests and a configurable "bad model" variant.
-- [ ] `runs/outcome` FSM handles every terminal transition except `dnf_budget` (deferred to S3).
-- [ ] `runs/engine` runs a full game against the mock provider, persisting `run_shots` and updating `runs`.
-- [ ] `runs/manager` owns the active-run registry and the SSE ring, drops the API key at terminal state.
-- [ ] `POST /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/shots`, `GET /api/runs/:id/events`, and `POST /api/runs/:id/abort` are implemented.
-- [ ] The `/play` and `/runs/:id` pages on `web/` drive a full mock-provider run and display live events.
-- [ ] Integration tests cover every terminal outcome reachable without pricing.
-- [ ] Playwright smoke on staging plays a mock run to `won`.
+- [x] `board/generator` produces deterministic fleets from a `YYYY-MM-DD` seed.
+- [x] `board/renderer` produces a PNG for any board state.
+- [x] `providers/mock` returns deterministic shots for tests and a configurable "bad model" variant.
+- [x] `runs/outcome` FSM handles every terminal transition except `dnf_budget` (deferred to S3).
+- [x] `runs/engine` runs a full game against the mock provider, persisting `run_shots` and updating `runs`.
+- [x] `runs/manager` owns the active-run registry and the SSE ring, drops the API key at terminal state.
+- [x] `POST /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/shots`, `GET /api/runs/:id/events`, and `POST /api/runs/:id/abort` are implemented.
+- [x] The `/play` and `/runs/:id` pages on `web/` drive a full mock-provider run and display live events.
+- [x] Integration tests cover every terminal outcome reachable without pricing.
+- [x] Playwright smoke on staging plays a mock run to `won`.
 
 ### S3 - Real providers, pricing, budget, leaderboard, replays
 
