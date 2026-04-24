@@ -14,7 +14,30 @@ Full product framing: see [`docs/about.md`](./docs/about.md).
 
 ## Status
 
-Pre-implementation. The foundation is done - the product is fully specified, the architecture and the story-level plan are written, and the repository is ready for the first vertical slice of work. No application code has been committed yet.
+Implementation is underway. The S3 OpenSpec change adds real provider adapters, pricing, budget handling, provider catalog APIs, leaderboard aggregation, board previews, and replay surfaces.
+
+## Local environment
+
+Copy `.env.example` to `.env.local` for local development, then replace the placeholders before using real providers:
+
+```sh
+cp .env.example .env.local
+
+OPENROUTER_API_KEY=replace-with-openrouter-key
+OPENCODE_GO_API_KEY=replace-with-opencode-go-key
+```
+
+Set `DATABASE_PATH` in your shell or service environment when running the backend, for example `DATABASE_PATH=/tmp/battleship-arena-dev.db`.
+
+The app does not need server-side provider keys for normal user-started runs because users paste their own key in `/play`. The placeholders are for manual real-token smoke checks:
+
+```sh
+bun run --cwd backend smoke:real-keys --provider openrouter --dry-run
+```
+
+## API docs
+
+With the backend running, open [`/api/docs`](http://localhost:8081/api/docs) in a browser for an interactive Swagger UI covering every route. The raw OpenAPI 3.1 document is at [`/api/openapi.json`](http://localhost:8081/api/openapi.json); the source lives in `backend/src/api/openapi.ts`. Use the Swagger UI's "Try it out" button to fire calls from the browser - the `POST /api/runs` form accepts your own provider key the same way `/play` does.
 
 ## Documentation
 

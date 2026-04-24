@@ -11,15 +11,20 @@ export interface RunLoopState {
   consecutiveSchemaErrors: number;
   schemaErrors: number;
   invalidCoordinates: number;
+  accumulatedCostMicros: number;
 }
 
 export type RunLoopEvent =
-  | { kind: "hit" }
-  | { kind: "miss" }
-  | { kind: "sunk" }
-  | { kind: "schema_error" }
-  | { kind: "invalid_coordinate" }
+  | { kind: "hit"; costUsdMicros?: number }
+  | { kind: "miss"; costUsdMicros?: number }
+  | { kind: "sunk"; costUsdMicros?: number }
+  | { kind: "schema_error"; costUsdMicros?: number }
+  | { kind: "invalid_coordinate"; costUsdMicros?: number }
   | { kind: "abort"; reason: "viewer" | "server_restart" };
+
+export interface RunLoopContext {
+  budgetMicros: number | null;
+}
 
 export function initialRunLoopState(): RunLoopState {
   return {
@@ -28,12 +33,42 @@ export function initialRunLoopState(): RunLoopState {
     consecutiveSchemaErrors: 0,
     schemaErrors: 0,
     invalidCoordinates: 0,
+    accumulatedCostMicros: 0,
   };
+}
+
+function costFor(event: RunLoopEvent): number {
+  return "costUsdMicros" in event ? (event.costUsdMicros ?? 0) : 0;
+}
+
+function resolveOutcome(state: RunLoopState, context: RunLoopContext): Outcome | null {
+  if (state.hits >= TOTAL_SHIP_CELLS) {
+    return "won";
+  }
+
+  if (state.shotsFired >= SHOT_CAP) {
+    return "dnf_shot_cap";
+  }
+
+  if (state.consecutiveSchemaErrors >= SCHEMA_ERROR_DNF_THRESHOLD) {
+    return "dnf_schema_errors";
+  }
+
+  if (
+    context.budgetMicros !== null &&
+    context.budgetMicros > 0 &&
+    state.accumulatedCostMicros >= context.budgetMicros
+  ) {
+    return "dnf_budget";
+  }
+
+  return null;
 }
 
 export function reduceOutcome(
   state: RunLoopState,
   event: RunLoopEvent,
+  context: RunLoopContext = { budgetMicros: null },
 ): { state: RunLoopState; outcome: Outcome | null } {
   switch (event.kind) {
     case "hit":
@@ -43,30 +78,20 @@ export function reduceOutcome(
         shotsFired: state.shotsFired + 1,
         hits: state.hits + 1,
         consecutiveSchemaErrors: 0,
+        accumulatedCostMicros: state.accumulatedCostMicros + costFor(event),
       };
 
-      if (nextState.hits >= TOTAL_SHIP_CELLS) {
-        return { state: nextState, outcome: "won" };
-      }
-
-      if (nextState.shotsFired >= SHOT_CAP) {
-        return { state: nextState, outcome: "dnf_shot_cap" };
-      }
-
-      return { state: nextState, outcome: null };
+      return { state: nextState, outcome: resolveOutcome(nextState, context) };
     }
     case "miss": {
       const nextState: RunLoopState = {
         ...state,
         shotsFired: state.shotsFired + 1,
         consecutiveSchemaErrors: 0,
+        accumulatedCostMicros: state.accumulatedCostMicros + costFor(event),
       };
 
-      if (nextState.shotsFired >= SHOT_CAP) {
-        return { state: nextState, outcome: "dnf_shot_cap" };
-      }
-
-      return { state: nextState, outcome: null };
+      return { state: nextState, outcome: resolveOutcome(nextState, context) };
     }
     case "invalid_coordinate": {
       const nextState: RunLoopState = {
@@ -74,26 +99,20 @@ export function reduceOutcome(
         shotsFired: state.shotsFired + 1,
         invalidCoordinates: state.invalidCoordinates + 1,
         consecutiveSchemaErrors: 0,
+        accumulatedCostMicros: state.accumulatedCostMicros + costFor(event),
       };
 
-      if (nextState.shotsFired >= SHOT_CAP) {
-        return { state: nextState, outcome: "dnf_shot_cap" };
-      }
-
-      return { state: nextState, outcome: null };
+      return { state: nextState, outcome: resolveOutcome(nextState, context) };
     }
     case "schema_error": {
       const nextState: RunLoopState = {
         ...state,
         schemaErrors: state.schemaErrors + 1,
         consecutiveSchemaErrors: state.consecutiveSchemaErrors + 1,
+        accumulatedCostMicros: state.accumulatedCostMicros + costFor(event),
       };
 
-      if (nextState.consecutiveSchemaErrors >= SCHEMA_ERROR_DNF_THRESHOLD) {
-        return { state: nextState, outcome: "dnf_schema_errors" };
-      }
-
-      return { state: nextState, outcome: null };
+      return { state: nextState, outcome: resolveOutcome(nextState, context) };
     }
     case "abort":
       return {

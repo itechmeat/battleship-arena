@@ -1,0 +1,47 @@
+---
+import ReplayPlayer from "../../../islands/ReplayPlayer.tsx";
+
+const shouldRegisterServiceWorker = import.meta.env.PROD;
+const runId = Astro.params.id ?? "__dynamic__";
+const pageTitle = runId === "__dynamic__" ? "Replay" : `Replay ${runId}`;
+
+export function getStaticPaths() {
+  return [{ params: { id: "__dynamic__" } }];
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f766e" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>{pageTitle} | BattleShipArena</title>
+    <style is:global>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: #f8fafc;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <ReplayPlayer runId={runId} client:load />
+
+    <script is:inline define:vars={{ shouldRegisterServiceWorker }}>
+      if (shouldRegisterServiceWorker) {
+        window.addEventListener("load", () => {
+          if ("serviceWorker" in navigator) {
+            void navigator.serviceWorker.register("/sw.js");
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

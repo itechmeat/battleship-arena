@@ -21,6 +21,14 @@ function localRunShellRewrite() {
           req.url = search.length > 0 ? `/runs/__dynamic__?${search}` : "/runs/__dynamic__";
         }
 
+        if (
+          /^\/runs\/[^/]+\/replay\/?$/.test(pathname) &&
+          !/^\/runs\/__dynamic__\/replay\/?$/.test(pathname)
+        ) {
+          req.url =
+            search.length > 0 ? `/runs/__dynamic__/replay?${search}` : "/runs/__dynamic__/replay";
+        }
+
         next();
       });
     },

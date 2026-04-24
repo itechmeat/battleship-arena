@@ -46,6 +46,7 @@ describe("S2a shared types", () => {
       result: "miss",
       rawResponse: "{}",
       reasoningText: null,
+      llmError: null,
       tokensIn: 0,
       tokensOut: 0,
       reasoningTokens: null,

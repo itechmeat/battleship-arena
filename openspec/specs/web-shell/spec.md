@@ -140,12 +140,52 @@ The service worker SHALL never cache leaderboard data, run state, shot lists, SS
 
 ### Requirement: /play page with provider + model picker, API key, budget, submit
 
-The `web/` workspace SHALL add `web/src/pages/play.astro` that renders a single `<StartRunForm client:load>` Solid island. The island MUST expose four controls: a provider `<select>` (S2a: only `mock` available), a model `<select>` (S2a: `mock-happy` default, `mock-misses`, `mock-schema-errors`), a password-type API key input with `autocomplete="off"` and no default value, a number input for budget (optional, positive). On submit the island MUST call `startRun({ providerId, modelId, apiKey, budgetUsd? })` via `lib/api.ts`, navigate to `/runs/<runId>` on success, and display the server's error message inline on failure. The submit button MUST gain `aria-busy` and the `disabled` attribute during an in-flight request.
+The `web/` workspace SHALL add `web/src/pages/play.astro` that renders a single `<StartRunForm client:load>` Solid island. The island MUST expose four controls: a provider `<select>`, a model `<select>`, a password-type API key input with `autocomplete="off"` and no default value, and a number input for budget. The provider and model options MUST be populated at hydration time from a `GET /api/providers` fetch; the built bundle MUST NOT carry a hardcoded provider or model catalog beyond what the endpoint returns. Changing the selected provider MUST clear the selected `modelId` (the form state MUST NOT retain any previously chosen model id or silently pre-seed a new one); the user MUST explicitly pick a model belonging to the newly selected provider before submission becomes possible. The synthetic `mock` option MUST be injected client-side when, and only when, `import.meta.env.MODE` is exactly one of the strings `"staging"`, `"development"`, or `"test"` (checked with strict equality against an explicit three-value whitelist; any other mode value, including `"production"`, `"preview"`, `"qa"`, or any custom mode, MUST NOT inject the option). The synthetic option carries three S2-era model variants (`mock-happy`, `mock-misses`, `mock-schema-errors`) and MUST NOT come from `GET /api/providers`; the backend never returns a `mock` provider entry, and the gating is entirely a client-side build-mode decision. The budget input MUST accept an optional non-negative decimal value; empty and `0` MUST be treated as absent by the submit handler (no `budgetUsd` field sent in the request body), while negative values MUST block submission client-side without issuing any `startRun` call. On submit the island MUST call `startRun({ providerId, modelId, apiKey, budgetUsd? })` via `lib/api.ts`, navigate to `/runs/<runId>` on success, and display the server's error message inline on failure. The submit button MUST gain `aria-busy` and the `disabled` attribute during an in-flight request.
 
-#### Scenario: Submit with mock-happy navigates to the run page
+#### Scenario: Provider and model selects populate from GET /api/providers
 
-- **WHEN** a user opens `/play`, selects `mock` and `mock-happy`, enters a non-empty API key, and clicks Start
+- **WHEN** a user lands on `/play` and the `GET /api/providers` response contains two real providers, each with their own models
+- **THEN** the provider `<select>` renders exactly those two providers in the order returned and the model `<select>` renders the models for the initially selected provider, with no extra entries from any hardcoded bundle list
+
+#### Scenario: Changing provider clears the selected modelId
+
+- **WHEN** a user selects provider `A`, picks model `A-m1`, then switches the provider `<select>` to `B`
+- **THEN** the model `<select>` re-renders with provider `B`'s models and the selected `modelId` in the form state is cleared (neither `A-m1` nor a pre-seeded `B-m1` is retained); the submit button remains disabled until the user explicitly selects a model belonging to `B`
+
+#### Scenario: Staging build exposes the mock option
+
+- **WHEN** `/play` hydrates under `import.meta.env.MODE === "staging"`
+- **THEN** the provider `<select>` contains an additional `mock` entry alongside the entries returned by `GET /api/providers`, and selecting it populates the model `<select>` with `mock-happy`, `mock-misses`, and `mock-schema-errors`
+
+#### Scenario: Production build hides the mock option
+
+- **WHEN** `/play` hydrates under `import.meta.env.MODE === "production"`
+- **THEN** the provider `<select>` contains no `mock` entry regardless of whether `GET /api/providers` would have included one
+
+#### Scenario: Submit with a real provider navigates to the run page
+
+- **WHEN** a user opens `/play`, selects a real provider and one of its models, enters a non-empty API key, and clicks Start
 - **THEN** the browser navigates to `/runs/<returned-runId>` after the backend returns 200
+
+#### Scenario: Submit with mock-happy on staging still navigates to the run page
+
+- **WHEN** a user on a staging build selects `mock` and `mock-happy`, enters a non-empty API key, and clicks Start
+- **THEN** the browser navigates to `/runs/<returned-runId>` after the backend returns 200
+
+#### Scenario: Empty budget input is treated as absent
+
+- **WHEN** a user submits the form with the budget field empty
+- **THEN** the `startRun` call body contains no `budgetUsd` field, and the backend persists `runs.budget_usd_micros` as `NULL`
+
+#### Scenario: Zero budget input is treated as absent
+
+- **WHEN** a user submits the form with the budget field set to `0`
+- **THEN** the `startRun` call body contains no `budgetUsd` field, and the backend persists `runs.budget_usd_micros` as `NULL`
+
+#### Scenario: Negative budget blocks submission
+
+- **WHEN** a user enters a negative number into the budget input, selects a valid provider and model, pastes a non-empty API key, and attempts to submit the form
+- **THEN** the island does not call `startRun`, does not navigate, surfaces inline validation feedback that the budget must be zero or a positive number, and leaves the submit button without the `aria-busy` attribute so the user can correct the value and retry
 
 #### Scenario: Server-side validation error renders inline
 

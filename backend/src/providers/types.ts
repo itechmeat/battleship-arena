@@ -10,6 +10,7 @@ export interface ProviderCallInput {
   boardPng: Uint8Array;
   shipsRemaining: readonly string[];
   systemPrompt: string;
+  mockCostUsd?: number;
   priorShots: readonly {
     row: number;
     col: number;
@@ -30,6 +31,11 @@ export interface ProviderCallOutput {
 export interface ProviderAdapter {
   readonly id: string;
   readonly models: readonly ProviderModel[];
+  /**
+   * Performs exactly one provider round trip. Implementations throw ProviderError
+   * with kind "transient" or "unreachable" for provider/auth/transport failures
+   * and never include API keys in errors.
+   */
   call(input: ProviderCallInput, signal: AbortSignal): Promise<ProviderCallOutput>;
 }
 

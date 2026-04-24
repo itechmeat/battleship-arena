@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { ApiError, getRun, getRunShots, request, startRun } from "../../src/lib/api.ts";
+import {
+  ApiError,
+  getLeaderboard,
+  getProviders,
+  getRun,
+  getRunShots,
+  request,
+  startRun,
+} from "../../src/lib/api.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -51,7 +59,7 @@ describe("api client", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
 
-    await expect(
+    return expect(
       startRun({
         providerId: "mock",
         modelId: "mock-happy",
@@ -81,5 +89,34 @@ describe("api client", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]?.signal).toBe(controller.signal);
     expect(calls[1]?.signal).toBe(controller.signal);
+  });
+
+  test("getProviders and getLeaderboard call the new API routes with filters and signal", async () => {
+    const calls: Array<{ path: string; signal: AbortSignal | null | undefined }> = [];
+    globalThis.fetch = mock(async (input, init) => {
+      calls.push({ path: String(input), signal: init?.signal });
+      return new Response(JSON.stringify({ providers: [], rows: [] }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const controller = new AbortController();
+
+    await getProviders();
+    await getLeaderboard("all", {
+      providerId: "openrouter",
+      modelId: "openai/gpt-5-nano",
+      signal: controller.signal,
+    });
+
+    expect(calls).toEqual([
+      { path: "/api/providers", signal: undefined },
+      {
+        path: "/api/leaderboard?scope=all&providerId=openrouter&modelId=openai%2Fgpt-5-nano",
+        signal: controller.signal,
+      },
+    ]);
   });
 });

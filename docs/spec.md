@@ -140,8 +140,8 @@ Exactly one of:
 - `won` - all 17 ship cells hit.
 - `dnf_shot_cap` - 100 legal shots fired without winning (the full board is covered).
 - `dnf_schema_errors` - 5 consecutive **schema errors** (shape/parse failures only; `invalid_coordinate` turns consume the shot cap but do not accumulate toward this threshold).
-- `dnf_budget` - cumulative cost for the run has crossed the user-declared budget.
-- `llm_unreachable` - the provider returned a non-retriable 4xx (bad key, revoked access, quota exhausted — anything other than 429). The run terminates without schema-error debt so a bad user key is not charged to the model's row.
+- `dnf_budget` - cumulative cost for the run has met or crossed the user-declared budget.
+- `llm_unreachable` - the provider adapter raised `ProviderError { kind: "unreachable" }` (bad key, revoked access, quota exhausted, or caller-side provider rejection). The run terminates without inserting a shot row and without touching schema-error counters.
 - `aborted_viewer` - an explicit `POST /api/runs/:id/abort` arrived.
 - `aborted_server_restart` - the backend process stopped (planned or unplanned) while the run was in-flight and the grace window did not finish it in time.
 
@@ -165,9 +165,10 @@ The schema-error DNF threshold is 5 consecutive, not 5 total. A model that self-
 
 ### 4.5 Leaderboard write policy
 
-- A run feeds the leaderboard only if its outcome is `won`.
-- Within a single `(exact_model_id, seed_date)`, only the lowest-shots run of the user's session counts. Since there are no user accounts, "user" here is a session cookie scoped to the run origin IP + a rotating per-session token; duplicates across sessions cannot be fully prevented in MVP and are not a goal.
-- All-time ranking aggregates across seed dates using the median shots-to-win per `exact_model_id`.
+- Only `won` runs feed the leaderboard.
+- Today dedupes wins to one best row per `(client_session, provider_id, model_id)` and then returns the best cross-session win per `(provider_id, model_id)`.
+- All-time dedupes wins to one best row per `(client_session, provider_id, model_id, seed_date)` before grouping by `(provider_id, model_id)` and computing the median shots to win.
+- Same `model_id` values from different providers remain separate rows.
 
 ### 4.6 Retention
 
@@ -185,7 +186,7 @@ SQLite via `bun:sqlite`, accessed through Drizzle ORM for type-safe queries. One
 | --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
 | `id`                  | TEXT PK | ULID, generated server-side.                                                                                          |
 | `seed_date`           | TEXT    | `YYYY-MM-DD` UTC.                                                                                                     |
-| `provider_id`         | TEXT    | Short slug (`openai`, `anthropic`, `google`, `mock`).                                                                 |
+| `provider_id`         | TEXT    | Short slug (`openrouter`, `opencode-go`, `mock`).                                                                     |
 | `model_id`            | TEXT    | Exact provider identifier (for example `gpt-4o-2024-11-20`).                                                          |
 | `display_name`        | TEXT    | Provider's human-readable name at run time.                                                                           |
 | `started_at`          | INTEGER | Unix ms.                                                                                                              |
@@ -214,6 +215,7 @@ SQLite via `bun:sqlite`, accessed through Drizzle ORM for type-safe queries. One
 | `result`           | TEXT    | `hit` \| `miss` \| `sunk` \| `schema_error` \| `invalid_coordinate`.                                                                                                                                                               |
 | `raw_response`     | TEXT    | Reasoning/thinking blocks stripped first, then the final user-visible response serialized, then truncated to 8 KiB. Without the strip-first step, an 8 KiB cap on a reasoning model fills with thinking and loses the actual shot. |
 | `reasoning_text`   | TEXT    | Parsed `reasoning` field if any, truncated to 2 KiB.                                                                                                                                                                               |
+| `llm_error`        | TEXT    | Redacted provider error metadata for transient provider failures, nullable otherwise.                                                                                                                                              |
 | `tokens_in`        | INTEGER |                                                                                                                                                                                                                                    |
 | `tokens_out`       | INTEGER |                                                                                                                                                                                                                                    |
 | `reasoning_tokens` | INTEGER | Nullable.                                                                                                                                                                                                                          |
@@ -228,17 +230,19 @@ Indexes: `runs(seed_date, outcome)`, `runs(model_id, outcome, shots_fired)`, `ru
 
 All endpoints live under `/api`. Request and response bodies are JSON unless noted. All responses set `Cache-Control` appropriately; mutating endpoints always set `no-store`.
 
-- `GET /api/providers` -> list of supported providers and their currently priced model IDs. Each priced model returns `pricing` (input/output USD per 1M tokens), `estimatedPromptTokens`, `estimatedImageTokens`, `estimatedOutputTokensPerShot`, `priceSource`, `lastReviewedAt`, and `estimatedCostRange` (min assumes a 17-shot perfect win; max assumes the 100-shot cap is hit). The `/play` page surfaces `estimatedCostRange` on the Start button so a user sees the realistic spend before confirming.
+- `GET /api/providers` -> list of supported real providers and their currently priced model IDs. Each priced model returns `pricing` (`inputUsdPerMtok`, `outputUsdPerMtok`, optional `reasoningUsdPerMtok`), estimator token counts, `estimatedCostRange` (`minUsd`, `maxUsd`; min assumes a 17-shot perfect win, max assumes the 100-shot cap is hit), `priceSource`, and `lastReviewedAt`. The `/play` page surfaces the range before starting. The response uses `ETag` and excludes `mock`.
 - `GET /api/board?date=YYYY-MM-DD` -> the rendered PNG for that UTC date (today by default). Safe to cache per date.
-- `POST /api/runs` -> start a run. Body: `{ providerId, modelId, apiKey, budgetUsd? }`. Returns `{ runId }`. The API key is consumed synchronously into the task closure and is not echoed.
+- `POST /api/runs` -> start a run. Body: `{ providerId, modelId, apiKey, budgetUsd? }`. `budgetUsd` absent, `null`, or `0` means no cap; positive values are stored as floor USD micros; negative or non-numeric values are `invalid_input`. In non-production mock flows, `mockCost` may be supplied for budget smoke tests. Returns `{ runId }`. The API key is consumed synchronously into the task closure and is not echoed.
 - `GET /api/runs/:id` -> run metadata (everything in `runs` except sensitive or large fields).
 - `GET /api/runs/:id/shots` -> full shot list for replay.
 - `GET /api/runs/:id/events` -> SSE stream for live viewing. Respects `Last-Event-ID`.
 - `POST /api/runs/:id/abort` -> sets outcome to `aborted_viewer`.
-- `GET /api/leaderboard?scope=today|all&providerId?=&modelId?=` -> ranked rows keyed by exact model ID.
+- `GET /api/leaderboard?scope=today|all&providerId?=&modelId?=` -> ranked rows keyed by `(providerId, modelId)` with deduping rules from section 4.5. `scope` is required. Responses are `no-store`.
 - `GET /api/status` -> `{ serverTime, version, maintenance: { untilAt, message } | null }`. The frontend polls this every ~10 s to render the `MaintenanceBanner`.
 - `POST /api/admin/maintenance` -> announce a soft-maintenance window. Body: `{ untilAt, message }`. Requires the `X-Admin-Token` header.
 - `DELETE /api/admin/maintenance` -> clear the active announcement. Requires `X-Admin-Token`.
+- `GET /api/openapi.json` -> the OpenAPI 3.1 document describing every endpoint in this section with their request/response schemas. Cacheable (`public, max-age=60`). Source of truth lives in `backend/src/api/openapi.ts`.
+- `GET /api/docs` -> interactive Swagger UI. Loads the spec from `/api/openapi.json` and lets an operator try each endpoint from the browser. Served by `@hono/swagger-ui`. The page is public; the backend does not protect it because the API itself is public-read except for the `POST /api/runs` body (which carries the user's own API key and is not persisted).
 
 ### 5.3 Error format
 
@@ -303,9 +307,9 @@ interface ProviderCallOutput {
 
 ### 6.2 Pricing
 
-Pricing per exact model ID is a compiled constant in the adapter module. Each entry carries `input` and `output` rates (USD per 1M tokens), `priceSource` (URL of the provider's pricing page), and `lastReviewedAt` (ISO date). Updating an entry requires a PR that bumps `lastReviewedAt` and, if the numbers changed, notes the effective date in the commit message. Cost per call is computed server-side from the adapter's reported token counts at request time. This keeps historical cost in `runs.cost_usd_micros` faithful to the pricing in effect when the run happened.
+Pricing per exact model ID is a compiled constant in `backend/src/pricing/catalog.ts`. Each entry carries input/output rates as integer USD micros per 1M tokens, estimator token counts, `priceSource`, and `lastReviewedAt` (ISO date). Updating an entry requires a PR that bumps `lastReviewedAt` and, if the numbers changed, notes the effective date in the commit message. Cost per call is computed server-side from the adapter's reported token counts at request time by flooring input and output halves independently. This keeps historical cost in `runs.cost_usd_micros` faithful to the pricing in effect when the run happened.
 
-Each adapter also exposes per-model estimators used by `GET /api/providers` for the Start-button preview: `estimatedPromptTokens`, `estimatedImageTokens`, `estimatedOutputTokensPerShot`. The min of `estimatedCostRange` assumes a 17-shot perfect win; the max assumes the 100-shot cap is reached. Reasoning tokens are not included in the estimate; the UI surfaces a "Reasoning models may cost more" note for entries with `hasReasoning`.
+The catalog exposes `estimatedCostRange.minUsd` and `estimatedCostRange.maxUsd` for `GET /api/providers`. The min assumes a 17-shot perfect win; the max assumes the 100-shot cap is reached. Reasoning tokens are not priced twice: provider-reported reasoning tokens are metadata, and only input/output token counts are charged.
 
 ### 6.3 Reasoning tokens
 
@@ -313,19 +317,18 @@ When a provider exposes reasoning-token counts (or a separate reasoning output),
 
 ### 6.4 Providers in MVP
 
-- `openrouter` - primary provider; a single adapter reaches the widest catalog of models and keeps the benchmark's surface large on day one.
-- `openai` - chat completions API.
-- `anthropic` - Messages API.
-- `google` - Gemini generateContent API.
-- `zai` - Zhipu GLM vision models.
-- `mock` - deterministic, no network calls. Cycles through a fixed shot sequence for tests. Used by every CI run.
+- `openrouter` - primary provider; OpenRouter Chat Completions endpoint with a curated model catalog.
+- `opencode-go` - OpenCode Go models that expose the OpenAI-compatible chat completions endpoint.
+- `mock` - deterministic, no network calls. Cycles through fixed shot sequences for tests and non-production smoke flows. Used by every CI run.
+
+The originally considered direct `openai`, `anthropic`, `google`, and `zai` adapters are post-MVP for this slice.
 
 ### 6.5 Rate limiting and retries
 
 Retries are confined to a single, narrowly-scoped layer: the adapter's HTTP client retries transient transport faults (network reset, TLS handshake failure, 5xx, 429) with exponential backoff `500 / 1500 / 4500` ms. A 429 honors the provider's `Retry-After` header when present. The game loop itself never retries; it only interprets typed outcomes reported by the adapter. The contract between the loop and the adapter is:
 
-- **Transient transport failure that exhausted adapter retries** (timeout, 5xx after three tries, 429 after backoff, TLS, DNS). The turn is recorded with `result = schema_error` and `llm_error` populated in `run_shots`. An `error` SSE event is emitted so the viewer sees the cause. The turn counts toward `dnf_schema_errors`.
-- **Non-retriable 4xx other than 429** (bad auth, revoked key, quota exhausted, malformed request on our side). No retry. The run terminates with outcome `llm_unreachable` and does **not** touch the schema-error counter. A wrong user key is not a model failure.
+- **Typed `ProviderError { kind: "transient" }`** (timeout after retries, 5xx after retries, 429 after backoff, TLS, DNS, malformed provider envelope). The run records one `run_shots` row with `result = schema_error`, zero tokens/cost, and redacted `llm_error`, then continues unless the schema-error threshold fires.
+- **Typed `ProviderError { kind: "unreachable" }`** (auth, quota, unsupported model, caller-side provider rejection). The run terminates with `llm_unreachable` without a shot row and without schema-error debt. A wrong user key is not a model failure.
 - **Parse or shape failure of a 200 response.** No SSE `error` event (the model did respond, just wrongly). The turn is recorded with `result = schema_error` and counts toward `dnf_schema_errors`.
 - **Duplicate or out-of-range cell in an otherwise parse-clean response.** `result = invalid_coordinate` as defined in section 3.5; consumes a turn, does not count toward `dnf_schema_errors`.
 
@@ -345,7 +348,7 @@ Retries are confined to a single, narrowly-scoped layer: the adapter's HTTP clie
 - `/` - leaderboard + today's rendered board. Static HTML with Solid islands hydrated on demand.
 - `/play` - provider picker, model picker, API-key field, budget field, start button.
 - `/runs/:id` - live game view. Renders the board, opens `EventSource('/api/runs/:id/events')`, updates a Solid signal per shot.
-- `/runs/:id/replay` - archived replay. Fetches `/api/runs/:id/shots`, provides playback controls.
+- `/replay/:id` - archived replay. Fetches `/api/runs/:id` and `/api/runs/:id/shots` in parallel, provides playback controls.
 
 ### 7.3 Mobile-first layout
 

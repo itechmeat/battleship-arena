@@ -1,7 +1,10 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import {
   isOutcome,
+  type LeaderboardRow,
+  type LeaderboardScope,
+  type LeaderboardResponse,
   type Outcome,
   type RunMeta,
   type RunShotRow,
@@ -62,6 +65,7 @@ export interface AppendShotArgs {
   result: ShotResult;
   rawResponse: string;
   reasoningText: string | null;
+  llmError?: string | null;
   tokensIn: number;
   tokensOut: number;
   reasoningTokens: number | null;
@@ -91,8 +95,212 @@ export interface Queries {
   finalizeRun(args: FinalizeRunArgs): void;
   getRunMeta(id: string): RunMeta | null;
   listShots(runId: string): RunShotRow[];
+  getLeaderboard(scope: LeaderboardScope, seedDate: string): LeaderboardResponse;
   findStuckRunIds(): string[];
   markStuckRunsAborted(outcome: Outcome, endedAt: number): number;
+}
+
+interface LeaderboardRunRow {
+  id: string;
+  seedDate: string;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  shotsFired: number;
+  clientSession: string;
+  startedAt: number;
+}
+
+function median(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middle] ?? 0;
+  }
+
+  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+function compareWins(left: LeaderboardRunRow, right: LeaderboardRunRow): number {
+  return (
+    left.shotsFired - right.shotsFired ||
+    left.startedAt - right.startedAt ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function dedupeBestWins(
+  rows: readonly LeaderboardRunRow[],
+  keyForRow: (row: LeaderboardRunRow) => string,
+): LeaderboardRunRow[] {
+  const bestByKey = new Map<string, LeaderboardRunRow>();
+
+  for (const row of rows) {
+    const key = keyForRow(row);
+    const current = bestByKey.get(key);
+
+    if (current === undefined || compareWins(row, current) < 0) {
+      bestByKey.set(key, row);
+    }
+  }
+
+  return [...bestByKey.values()];
+}
+
+function modelKey(row: LeaderboardRunRow): string {
+  return `${row.providerId}\0${row.modelId}`;
+}
+
+function rankRows(rows: readonly Omit<LeaderboardRow, "rank">[]): LeaderboardRow[] {
+  return rows.map((row, index) => ({ rank: index + 1, ...row }));
+}
+
+function leaderboardTodayRows(db: DatabaseHandle["db"], seedDate: string): LeaderboardRunRow[] {
+  return db.all<LeaderboardRunRow>(sql`
+    WITH ranked AS (
+      SELECT
+        id,
+        seed_date AS seedDate,
+        provider_id AS providerId,
+        model_id AS modelId,
+        display_name AS displayName,
+        shots_fired AS shotsFired,
+        client_session AS clientSession,
+        started_at AS startedAt,
+        ROW_NUMBER() OVER (
+          PARTITION BY client_session, provider_id, model_id
+          ORDER BY shots_fired ASC, started_at ASC, id ASC
+        ) AS sessionRank
+      FROM runs
+      WHERE outcome = 'won' AND seed_date = ${seedDate}
+    )
+    SELECT
+      id,
+      seedDate,
+      providerId,
+      modelId,
+      displayName,
+      shotsFired,
+      clientSession,
+      startedAt
+    FROM ranked
+    WHERE sessionRank = 1
+  `);
+}
+
+function leaderboardAllRows(db: DatabaseHandle["db"]): LeaderboardRunRow[] {
+  return db.all<LeaderboardRunRow>(sql`
+    WITH ranked AS (
+      SELECT
+        id,
+        seed_date AS seedDate,
+        provider_id AS providerId,
+        model_id AS modelId,
+        display_name AS displayName,
+        shots_fired AS shotsFired,
+        client_session AS clientSession,
+        started_at AS startedAt,
+        ROW_NUMBER() OVER (
+          PARTITION BY client_session, provider_id, model_id, seed_date
+          ORDER BY shots_fired ASC, started_at ASC, id ASC
+        ) AS sessionSeedRank
+      FROM runs
+      WHERE outcome = 'won'
+    )
+    SELECT
+      id,
+      seedDate,
+      providerId,
+      modelId,
+      displayName,
+      shotsFired,
+      clientSession,
+      startedAt
+    FROM ranked
+    WHERE sessionSeedRank = 1
+  `);
+}
+
+function aggregateTodayLeaderboardRows(rows: readonly LeaderboardRunRow[]): LeaderboardRow[] {
+  const sessionBest = dedupeBestWins(rows, (row) =>
+    [row.clientSession, row.providerId, row.modelId].join("\0"),
+  );
+  const byModel = new Map<string, LeaderboardRunRow[]>();
+
+  for (const row of sessionBest) {
+    const key = modelKey(row);
+    byModel.set(key, [...(byModel.get(key) ?? []), row]);
+  }
+
+  return rankRows(
+    [...byModel.values()]
+      .map((modelRows) => {
+        const best = dedupeBestWins(modelRows, modelKey).at(0);
+        if (best === undefined) {
+          throw new Error("Cannot aggregate empty leaderboard group");
+        }
+
+        return {
+          providerId: best.providerId,
+          modelId: best.modelId,
+          displayName: best.displayName,
+          shotsToWin: best.shotsFired,
+          runsCount: modelRows.length,
+          bestRunId: best.id,
+        };
+      })
+      .sort(
+        (left, right) =>
+          left.shotsToWin - right.shotsToWin ||
+          left.displayName.localeCompare(right.displayName) ||
+          left.providerId.localeCompare(right.providerId) ||
+          left.modelId.localeCompare(right.modelId),
+      ),
+  );
+}
+
+function aggregateAllLeaderboardRows(rows: readonly LeaderboardRunRow[]): LeaderboardRow[] {
+  const sessionSeedBest = dedupeBestWins(rows, (row) =>
+    [row.clientSession, row.providerId, row.modelId, row.seedDate].join("\0"),
+  );
+  const byModel = new Map<string, LeaderboardRunRow[]>();
+
+  for (const row of sessionSeedBest) {
+    const key = modelKey(row);
+    byModel.set(key, [...(byModel.get(key) ?? []), row]);
+  }
+
+  return rankRows(
+    [...byModel.values()]
+      .map((modelRows) => {
+        const first = modelRows[0];
+        if (first === undefined) {
+          throw new Error("Cannot aggregate empty leaderboard group");
+        }
+
+        return {
+          providerId: first.providerId,
+          modelId: first.modelId,
+          displayName: first.displayName,
+          shotsToWin: median(modelRows.map((row) => row.shotsFired)),
+          runsCount: modelRows.length,
+          bestRunId: null,
+        };
+      })
+      .sort(
+        (left, right) =>
+          left.shotsToWin - right.shotsToWin ||
+          right.runsCount - left.runsCount ||
+          left.displayName.localeCompare(right.displayName) ||
+          left.providerId.localeCompare(right.providerId) ||
+          left.modelId.localeCompare(right.modelId),
+      ),
+  );
 }
 
 export function createQueries(db: DatabaseHandle["db"]): Queries {
@@ -142,6 +350,7 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
           result: args.result,
           rawResponse: args.rawResponse,
           reasoningText: args.reasoningText,
+          llmError: args.llmError ?? null,
           tokensIn: args.tokensIn,
           tokensOut: args.tokensOut,
           reasoningTokens: args.reasoningTokens,
@@ -214,6 +423,7 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
           result: readShotResult(row.result),
           rawResponse: row.rawResponse,
           reasoningText: row.reasoningText,
+          llmError: row.llmError,
           tokensIn: row.tokensIn,
           tokensOut: row.tokensOut,
           reasoningTokens: row.reasoningTokens,
@@ -221,6 +431,19 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
           durationMs: row.durationMs,
           createdAt: row.createdAt,
         }));
+    },
+
+    getLeaderboard(scope, seedDate) {
+      const rows = scope === "today" ? leaderboardTodayRows(db, seedDate) : leaderboardAllRows(db);
+
+      return {
+        scope,
+        seedDate: scope === "today" ? seedDate : null,
+        rows:
+          scope === "today"
+            ? aggregateTodayLeaderboardRows(rows)
+            : aggregateAllLeaderboardRows(rows),
+      };
     },
 
     findStuckRunIds() {

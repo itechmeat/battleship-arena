@@ -1,4 +1,12 @@
-import type { ErrorEnvelope, Outcome, RunMeta, RunShotRow } from "@battleship-arena/shared";
+import type {
+  ErrorEnvelope,
+  LeaderboardResponse,
+  LeaderboardScope,
+  Outcome,
+  ProvidersResponse,
+  RunMeta,
+  RunShotRow,
+} from "@battleship-arena/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -57,6 +65,7 @@ export interface StartRunPayload {
   modelId: string;
   apiKey: string;
   budgetUsd?: number;
+  mockCost?: number;
 }
 
 export interface StartRunResponse {
@@ -80,6 +89,37 @@ export function startRun(payload: StartRunPayload): Promise<StartRunResponse> {
     },
     body: JSON.stringify(payload),
   });
+}
+
+export function getProviders(signal?: AbortSignal): Promise<ProvidersResponse> {
+  return request<ProvidersResponse>(
+    "/api/providers",
+    signal === undefined ? undefined : { signal },
+  );
+}
+
+export interface GetLeaderboardOptions {
+  providerId?: string;
+  modelId?: string;
+  signal?: AbortSignal;
+}
+
+export function getLeaderboard(
+  scope: LeaderboardScope = "today",
+  options: GetLeaderboardOptions = {},
+): Promise<LeaderboardResponse> {
+  const search = new URLSearchParams({ scope });
+  if (options.providerId !== undefined && options.providerId.length > 0) {
+    search.set("providerId", options.providerId);
+  }
+  if (options.modelId !== undefined && options.modelId.length > 0) {
+    search.set("modelId", options.modelId);
+  }
+
+  return request<LeaderboardResponse>(
+    `/api/leaderboard?${search.toString()}`,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
 }
 
 export function getRun(runId: string, signal?: AbortSignal): Promise<RunMeta> {

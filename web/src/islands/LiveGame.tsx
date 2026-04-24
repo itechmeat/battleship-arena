@@ -140,6 +140,7 @@ export function LiveGame(props: LiveGameProps) {
                   result: event.result,
                   rawResponse: "",
                   reasoningText: event.reasoning,
+                  llmError: null,
                   tokensIn: 0,
                   tokensOut: 0,
                   reasoningTokens: null,
@@ -295,7 +296,8 @@ export function LiveGame(props: LiveGameProps) {
         </Show>
         <Show when={phase() === "terminal"}>
           <p class={styles.phaseNote}>
-            Run complete. The board now reflects the terminal shot log.
+            Run complete. The board now reflects the terminal shot log.{" "}
+            <a href={`/runs/${encodeURIComponent(runId())}/replay`}>Open replay</a>
           </p>
         </Show>
         <Show when={phase() === "error" && error() !== null}>

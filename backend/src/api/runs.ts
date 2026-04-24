@@ -91,11 +91,20 @@ function readRequiredString(
 
 function readOptionalBudgetUsd(body: Record<string, unknown>): number | undefined | null {
   const value = body.budgetUsd;
-  if (value === undefined) {
+  if (value === undefined || value === null || value === 0) {
     return undefined;
   }
 
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function readOptionalMockCostUsd(body: Record<string, unknown>): number | undefined | null {
+  const value = body.mockCost;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 export function createRunsRouter(deps: RunsRouterDeps) {
@@ -336,6 +345,15 @@ export function createRunsRouter(deps: RunsRouterDeps) {
       });
     }
 
+    const mockCostUsd = readOptionalMockCostUsd(body);
+    if (mockCostUsd === null) {
+      return respondError(context, "invalid_input", 400, "Invalid input", {
+        field: "mockCost",
+      });
+    }
+
+    const canUseMockCost = providerId === "mock" && process.env.NODE_ENV !== "production";
+
     const clientSession = readSession(context);
     const runId = deps.manager.start({
       providerId,
@@ -344,6 +362,7 @@ export function createRunsRouter(deps: RunsRouterDeps) {
       clientSession,
       seedDate: new Date().toISOString().slice(0, 10),
       ...(budgetUsd === undefined ? {} : { budgetUsd }),
+      ...(mockCostUsd === undefined || !canUseMockCost ? {} : { mockCostUsd }),
     });
 
     return context.json({ runId }, 200);

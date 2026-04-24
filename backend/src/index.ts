@@ -2,8 +2,7 @@ import { createApp } from "./app.ts";
 import { loadConfigOrExit, type AppConfig } from "./config.ts";
 import { openDatabase } from "./db/client.ts";
 import { createQueries } from "./db/queries.ts";
-import { createMockProvider } from "./providers/mock.ts";
-import { createProviderRegistry } from "./providers/types.ts";
+import { createDefaultProviderRegistry } from "./providers/registry.ts";
 import { createManager } from "./runs/manager.ts";
 import { reconcileStuckRuns } from "./runs/reconcile.ts";
 
@@ -18,8 +17,9 @@ export async function bootstrap(config: AppConfig) {
   const queries = createQueries(database.db);
   reconcileStuckRuns(queries, Date.now());
 
-  const providers = createProviderRegistry({
-    mock: createMockProvider({ delayMs: config.mockTurnDelayMs }),
+  const providers = createDefaultProviderRegistry({
+    mockTurnDelayMs: config.mockTurnDelayMs,
+    ...(process.env.NODE_ENV === undefined ? {} : { environment: process.env.NODE_ENV }),
   });
   const manager = createManager({
     queries,

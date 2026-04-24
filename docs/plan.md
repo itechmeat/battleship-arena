@@ -65,16 +65,14 @@ This checklist spans all four stories and is updated as work lands. A check mark
 - [x] Integration tests cover every terminal outcome reachable without pricing.
 - [x] Playwright smoke on staging plays a mock run to `won`.
 
-### S3 - Real providers, pricing, budget, leaderboard, replays
-
-- [ ] `providers/openrouter`, `providers/openai`, `providers/anthropic`, `providers/google`, `providers/zai` implement the adapter interface.
-- [ ] `providers/pricing` exposes a per-exact-model-ID pricing table; `cost_usd_micros` is computed server-side.
-- [ ] `dnf_budget` is reachable and covered by a mock-provider test that simulates cumulative cost crossing the cap.
-- [ ] Contract tests use captured fixtures for each real provider; no real API keys are required to run them.
-- [ ] `GET /api/providers` returns the current list with `pricing`, `priceSource`, `lastReviewedAt`, and `estimatedCostRange` per priced model; the `/play` page's Start button shows the range.
-- [ ] `GET /api/leaderboard` supports `scope=today` and `scope=all`, filtered by `providerId` and `modelId`.
-- [ ] The home page shows today's board and the leaderboard, with filters as Solid islands.
-- [ ] `/runs/:id/replay` plays back any archived run at a user-controlled speed.
+- [x] `providers/openrouter` and `providers/opencode-go` implement the adapter interface for the S3 scope. Direct `openai`, `anthropic`, `google`, and `zai` adapters are deferred.
+- [x] `pricing/catalog` exposes a per-exact-model-ID pricing table; `cost_usd_micros` is computed server-side.
+- [x] `dnf_budget` is reachable and covered by a mock-provider test that simulates cumulative cost crossing the cap.
+- [x] Contract tests cover the adapter request/response/parser behavior without real API keys.
+- [x] `GET /api/providers` returns the current list with `pricing`, source metadata, and cost estimates per priced model; `/play` shows the range.
+- [x] `GET /api/leaderboard` supports `scope=today` and `scope=all` with session dedupe.
+- [x] The home page shows today's board and the leaderboard.
+- [x] `/runs/:id/replay` plays back any archived run at a user-controlled speed.
 - [ ] Playwright smoke on staging runs the mock end-to-end, hits a budget DNF, and opens a replay.
 
 ### S4 - Seed rollover, maintenance, backup drill, production cutover
@@ -179,47 +177,45 @@ On staging: a user clicks through `/play`, picks `mock`, starts a run, and watch
 
 ### 6.1 Goal
 
-Make the product useful to anyone who owns a key for any of the five real providers (`openrouter`, `openai`, `anthropic`, `google`, `zai`). Introduce cost tracking, the budget DNF, the leaderboard, and the replay viewer. No CI run spends real tokens; contract tests use captured fixtures.
+Make the product useful to anyone who owns a key for the S3 real-provider scope: `openrouter` and `opencode-go`. Introduce cost tracking, the budget DNF, the leaderboard, and the replay viewer. No CI run spends real tokens; adapter tests use redacted fixtures or in-test responses.
 
 ### 6.2 Acceptance criteria
 
-- `providers/openrouter`, `providers/openai`, `providers/anthropic`, `providers/google`, `providers/zai` implement the adapter interface and are covered by contract tests against captured, redacted fixtures.
-- `providers/pricing.ts` contains a per-exact-model-ID table. Updating the table is a documented PR with an effective date in the commit message.
+- `providers/openrouter` and `providers/opencode-go` implement the adapter interface and are covered by contract tests against captured, redacted fixtures or equivalent in-test responses.
+- `pricing/catalog.ts` contains a per-exact-model-ID table. Updating the table is a documented PR with an effective date in the commit message.
 - `runs/engine` writes `cost_usd_micros` on every `run_shots` row and rolls it up to `runs.cost_usd_micros` at terminal state.
 - `dnf_budget` is reachable when `budget_usd_micros` is non-null and cumulative cost would cross it on the next turn. A test simulates this against the mock provider by assigning a synthetic per-turn cost.
-- `GET /api/providers` returns the live list with `pricing`, `priceSource`, `lastReviewedAt`, and `estimatedCostRange` per priced model; the `/play` Start button renders the range.
-- `GET /api/leaderboard?scope=today|all` returns ranked rows keyed by exact model ID, applying the "best run per (model ID, seed date)" rule for `today` and the median-shots aggregation for `all`.
-- The home page renders today's board and the leaderboard with filter islands (provider and model).
+- `GET /api/providers` returns the live list with `pricing`, source metadata, and estimated cost range per priced model; the `/play` Start button renders the range.
+- `GET /api/leaderboard?scope=today|all` returns ranked rows keyed by `(providerId, modelId)`, applying session dedupe before median aggregation.
+- The home page renders today's board and the leaderboard.
 - `/runs/:id/replay` plays back any archived run at 1x, 2x, and 4x speed; a playhead shows the current turn.
 - Playwright smoke covers: start a mock run and finish it, hit a budget DNF in the mock, reach the leaderboard, open a replay.
 
 ### 6.3 Final artifact
 
-On staging: `/play` offers real provider options, a user with a real key can run a real model end-to-end (verified manually once), the home page shows a non-empty leaderboard populated from accumulated mock and real runs, and any archived run is replayable.
+On staging: `/play` offers OpenRouter and OpenCode Go options, a user with a real key can run a real model end-to-end (verified manually once), the home page shows a non-empty leaderboard populated from accumulated mock and real runs, and any archived run is replayable.
 
 ### 6.4 Verification method
 
-- `bun test` passes; contract-test suites hit fixtures for each real provider and validate parsing, token counting, and cost math.
-- Manual: one real-provider run per provider, recorded as a note in the PR description (model ID, cost, outcome).
+- `bun test` passes; adapter suites validate parsing, token counting, error mapping, and cost math.
+- Manual: one real-provider smoke per S3 provider, recorded as a note in the PR description (model ID, cost, outcome).
 - Playwright smoke runs the four scenarios above against staging.
 
 ### 6.5 Task list
 
-1. Capture HTTP fixtures for a small corpus of real provider responses (1 happy path, 1 schema-error path, 1 token-usage edge case, 1 error path each). Redact keys and any user-identifiable headers. Store fixtures under `backend/tests/fixtures/providers/`.
+1. Capture or construct redacted provider response fixtures for OpenRouter and OpenCode Go. Store durable fixtures under `backend/tests/fixtures/providers/` when captured from live traffic.
 2. Implement `providers/openrouter.ts` (primary adapter; its catalog reaches the widest surface). Cover parse, tokens, error mapping via contract tests.
-3. Implement `providers/openai.ts`. Cover the same.
-4. Implement `providers/anthropic.ts`. Cover the same.
-5. Implement `providers/google.ts`. Cover the same.
-6. Implement `providers/zai.ts` (Zhipu GLM vision). Cover the same.
-7. Implement `providers/pricing.ts` with the per-model table, including `priceSource` and `lastReviewedAt`. Cover cost math with unit tests (including the integer-micros rounding).
-8. Wire pricing into `runs/engine.ts`. Update integration tests to assert `cost_usd_micros` is non-zero when the mock reports a synthetic price.
-9. Implement the `dnf_budget` path in `runs/outcome.ts`. Cover with an integration test that sets a tight budget.
-10. Implement `GET /api/providers` returning the current table plus `estimatedCostRange` per priced model. Surface the range on the `/play` Start button. Test both.
-11. Implement `GET /api/leaderboard` with both scopes. Cover with integration tests over a seeded dataset.
-12. Add the leaderboard and today's-board sections on the home page as Solid islands; add provider and model filters.
-13. Add `/runs/:id/replay` with the `ReplayPlayer` island, playhead, and speed controls. Cover the replay state machine with a unit test.
-14. Extend the Playwright smoke to cover the four scenarios.
-15. Perform one real-run per provider, record the result, and commit the pricing-table update if any prices have drifted since the last PR.
+3. Implement `providers/opencode-go.ts`. Cover the same.
+4. Defer direct `openai`, `anthropic`, `google`, and `zai` adapters to a later change.
+5. Implement `pricing/catalog.ts` with the per-model table, including `priceSource` and `lastReviewedAt`. Cover cost math with unit tests (including integer micros rounding).
+6. Wire pricing into `runs/engine.ts`. Update integration tests to assert `cost_usd_micros` is non-zero when the mock reports a synthetic price.
+7. Implement the `dnf_budget` path in `runs/outcome.ts`. Cover with an integration test that sets a tight budget.
+8. Implement `GET /api/providers` returning the current table plus estimated cost range per priced model. Surface the range on the `/play` Start button. Test both.
+9. Implement `GET /api/leaderboard` with both periods. Cover with integration tests over a seeded dataset.
+10. Add the leaderboard and today's-board sections on the home page.
+11. Add `/runs/:id/replay` with the `ReplayPlayer` island, playhead, and speed controls. Cover the replay state machine with a unit test.
+12. Extend the Playwright smoke to cover the four scenarios.
+13. Perform one real-run per S3 provider, record the result, and commit the pricing-table update if any prices have drifted since the last PR.
 
 ## 7. Story S4 - Seed rollover, maintenance, backup drill, production cutover
 

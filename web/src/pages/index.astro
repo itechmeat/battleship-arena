@@ -1,8 +1,21 @@
 ---
 import type { HealthResponse } from "@battleship-arena/shared";
+import { BOARD_SIZE, renderBoardSvg, type BoardView } from "@battleship-arena/shared";
+
+import Leaderboard from "../islands/Leaderboard.tsx";
 
 const healthStatus: HealthResponse["status"] = "ok";
 const shouldRegisterServiceWorker = import.meta.env.PROD;
+const emptyBoard: BoardView = {
+  size: BOARD_SIZE,
+  cells: Array.from({ length: BOARD_SIZE * BOARD_SIZE }, () => "unknown"),
+};
+const boardSvg = renderBoardSvg(emptyBoard);
+const columnLabels = Array.from({ length: BOARD_SIZE }, (_, index) =>
+  String.fromCharCode("A".charCodeAt(0) + index),
+);
+const rowLabels = Array.from({ length: BOARD_SIZE }, (_, index) => String(index + 1));
+const seedDate = new Date().toISOString().slice(0, 10);
 ---
 
 <!doctype html>
@@ -13,13 +26,150 @@ const shouldRegisterServiceWorker = import.meta.env.PROD;
     <meta name="theme-color" content="#0f766e" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>BattleShipArena</title>
+    <style is:global>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        display: grid;
+        gap: 2rem;
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0 3rem;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .brand {
+        margin: 0;
+        font-size: clamp(1.8rem, 3vw, 3rem);
+        line-height: 1;
+      }
+
+      .playLink {
+        border-radius: 8px;
+        background: #0f766e;
+        color: #ffffff;
+        padding: 0.7rem 0.95rem;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .panel {
+        border: 1px solid #dbe3ea;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 1rem;
+      }
+
+      .sectionTitle {
+        margin: 0 0 0.8rem;
+        font-size: 1rem;
+      }
+
+      .caption {
+        margin: 0 0 0.75rem;
+        color: #475569;
+        font-size: 0.9rem;
+      }
+
+      .boardFrame {
+        display: grid;
+        grid-template-columns: 1.4rem minmax(0, 1fr) 1.4rem;
+        grid-template-rows: 1.4rem minmax(0, 1fr) 1.4rem;
+        gap: 0.25rem;
+      }
+
+      .boardFrame svg {
+        grid-column: 2;
+        grid-row: 2;
+        width: 100%;
+        height: auto;
+        border-radius: 6px;
+      }
+
+      .cols,
+      .rows {
+        display: grid;
+        color: #475569;
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+
+      .cols {
+        grid-template-columns: repeat(10, 1fr);
+        grid-column: 2;
+        place-items: center;
+      }
+
+      .colsTop {
+        grid-row: 1;
+      }
+
+      .colsBottom {
+        grid-row: 3;
+      }
+
+      .rows {
+        grid-template-rows: repeat(10, 1fr);
+        grid-row: 2;
+        place-items: center;
+      }
+
+      .rowsLeft {
+        grid-column: 1;
+      }
+
+      .rowsRight {
+        grid-column: 3;
+      }
+    </style>
   </head>
   <body>
     <main>
-      <h1>BattleShipArena</h1>
-      <p data-health-status={healthStatus}>
-        Mobile-first Battleship benchmark shell. Game logic and live runs land in later stories.
-      </p>
+      <div class="topbar">
+        <h1 class="brand">BattleShipArena</h1>
+        <a class="playLink" href="/play">Start run</a>
+      </div>
+      <section class="panel">
+        <h2 class="sectionTitle">Today&apos;s board</h2>
+        <p class="caption">Seed {seedDate} UTC</p>
+        <div class="boardFrame">
+          <div class="cols colsTop" aria-hidden="true">
+            {columnLabels.map((label) => <span>{label}</span>)}
+          </div>
+          <div class="cols colsBottom" aria-hidden="true">
+            {columnLabels.map((label) => <span>{label}</span>)}
+          </div>
+          <div class="rows rowsLeft" aria-hidden="true">
+            {rowLabels.map((label) => <span>{label}</span>)}
+          </div>
+          <div class="rows rowsRight" aria-hidden="true">
+            {rowLabels.map((label) => <span>{label}</span>)}
+          </div>
+          <Fragment set:html={boardSvg} />
+        </div>
+      </section>
+      <section class="panel">
+        <h2 class="sectionTitle">Leaderboard</h2>
+        <div data-leaderboard-skeleton>
+          <Leaderboard client:load />
+        </div>
+      </section>
+      <p data-health-status={healthStatus} hidden>ok</p>
     </main>
 
     <script is:inline define:vars={{ shouldRegisterServiceWorker }}>

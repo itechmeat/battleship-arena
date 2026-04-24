@@ -51,6 +51,7 @@ export interface RunShotRow {
   result: ShotResult;
   rawResponse: string;
   reasoningText: string | null;
+  llmError: string | null;
   tokensIn: number;
   tokensOut: number;
   reasoningTokens: number | null;
@@ -64,6 +65,70 @@ export interface StartRunInput {
   modelId: string;
   apiKey: string;
   budgetUsd?: number;
+  mockCostUsd?: number;
   clientSession: string;
   seedDate: string;
+}
+
+export type ProviderError =
+  | { kind: "transient"; cause: string }
+  | { kind: "unreachable"; cause: string; status: number };
+
+export type ProviderErrorShape = ProviderError;
+
+export interface ModelPricingView {
+  inputUsdPerMtok: number;
+  outputUsdPerMtok: number;
+}
+
+export interface ModelCostEstimate {
+  minUsd: number;
+  maxUsd: number;
+}
+
+export interface ProvidersResponseModel {
+  id: string;
+  displayName: string;
+  hasReasoning: boolean;
+  pricing: ModelPricingView;
+  estimatedPromptTokens: number;
+  estimatedImageTokens: number;
+  estimatedOutputTokensPerShot: number;
+  estimatedCostRange: ModelCostEstimate;
+  priceSource: string;
+  lastReviewedAt: string;
+}
+
+export interface ProvidersResponseProvider {
+  id: string;
+  displayName: string;
+  models: readonly ProvidersResponseModel[];
+}
+
+export interface ProvidersResponse {
+  providers: readonly ProvidersResponseProvider[];
+}
+
+export type ProviderCatalogModel = ProvidersResponseModel;
+export type ProviderCatalogProvider = ProvidersResponseProvider;
+
+export type LeaderboardScope = "today" | "all";
+export type LeaderboardPeriod = LeaderboardScope;
+
+export interface LeaderboardRow {
+  rank: number;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  shotsToWin: number;
+  runsCount: number;
+  bestRunId: string | null;
+}
+
+export type LeaderboardEntry = LeaderboardRow;
+
+export interface LeaderboardResponse {
+  scope: LeaderboardScope;
+  seedDate: string | null;
+  rows: readonly LeaderboardRow[];
 }

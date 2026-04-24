@@ -178,4 +178,89 @@ describe("POST /api/runs", () => {
       });
     });
   });
+
+  test("null and zero budgets are accepted as no cap", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const { app, started } = createTestApp(db);
+
+      for (const budgetUsd of [null, 0]) {
+        const response = await app.request("/api/runs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            providerId: "mock",
+            modelId: "mock-happy",
+            apiKey: "test-key",
+            budgetUsd,
+          }),
+        });
+
+        expect(response.status).toBe(200);
+      }
+
+      expect(started[0]).not.toHaveProperty("budgetUsd");
+      expect(started[1]).not.toHaveProperty("budgetUsd");
+    });
+  });
+
+  test("positive budget and development mockCost are forwarded", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const { app, started } = createTestApp(db);
+
+      const response = await app.request("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "mock",
+          modelId: "mock-happy",
+          apiKey: "test-key",
+          budgetUsd: 0.01,
+          mockCost: 0.001,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(started[0]).toMatchObject({
+        budgetUsd: 0.01,
+        mockCostUsd: 0.001,
+      });
+    });
+  });
+
+  test("production strips mockCost before starting a run", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      await withTempDatabase(async ({ db }) => {
+        const { app, started } = createTestApp(db);
+
+        const response = await app.request("/api/runs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            providerId: "mock",
+            modelId: "mock-happy",
+            apiKey: "test-key",
+            mockCost: 0.001,
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(started[0]).not.toHaveProperty("mockCostUsd");
+      });
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
 });

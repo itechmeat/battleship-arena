@@ -11,6 +11,7 @@ import {
 import { generateBoard, type BoardLayout, type ShipPlacement } from "../board/generator.ts";
 import { renderBoardPng } from "../board/renderer.ts";
 import type { Queries } from "../db/queries.ts";
+import { isProviderError } from "../providers/errors.ts";
 import type { ProviderAdapter } from "../providers/types.ts";
 
 import {
@@ -19,11 +20,11 @@ import {
   type RunLoopEvent,
   type RunLoopState,
 } from "./outcome.ts";
+import { SYSTEM_PROMPT } from "./prompt.ts";
 
 const RAW_RESPONSE_LIMIT = 8 * 1024;
 const REASONING_TEXT_LIMIT = 2 * 1024;
-const SYSTEM_PROMPT =
-  'Return exactly one plain JSON object: {"row":0,"col":0,"reasoning":"optional string"}. Use integer row and col in [0,9].';
+type ShotRunLoopEvent = Exclude<RunLoopEvent, { kind: "abort" }>;
 
 type Awaitable<T> = T | Promise<T>;
 
@@ -37,7 +38,6 @@ interface AggregateTotals {
   tokensIn: number;
   tokensOut: number;
   reasoningTokens: number | null;
-  costUsdMicros: number;
 }
 
 export interface RunEngineDeps {
@@ -80,7 +80,7 @@ function readAbortReason(signal: AbortSignal): "viewer" | "server_restart" {
 }
 
 function budgetUsdToMicros(budgetUsd: number | undefined): number | null {
-  return budgetUsd === undefined ? null : Math.round(budgetUsd * 1_000_000);
+  return budgetUsd === undefined ? null : Math.floor(budgetUsd * 1_000_000);
 }
 
 function addReasoningTokens(current: number | null, next: number | null): number | null {
@@ -89,6 +89,10 @@ function addReasoningTokens(current: number | null, next: number | null): number
   }
 
   return (current ?? 0) + (next ?? 0);
+}
+
+function serializeProviderError(error: { cause: string }): string {
+  return truncateText(error.cause, REASONING_TEXT_LIMIT);
 }
 
 function buildBoardView(
@@ -166,7 +170,7 @@ function classifyShot(
   col: number | null;
   result: "hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate";
   reasoningText: string | null;
-  event: RunLoopEvent;
+  event: ShotRunLoopEvent;
   legalShot: LegalPriorShot | null;
 } {
   const parsed = parseShot(rawText);
@@ -283,7 +287,6 @@ export async function runEngine(
     tokensIn: 0,
     tokensOut: 0,
     reasoningTokens: null,
-    costUsdMicros: 0,
   };
   const legalPriorShots: LegalPriorShot[] = [];
   const seenCoordinates = new Set<string>();
@@ -302,7 +305,7 @@ export async function runEngine(
       tokensIn: totals.tokensIn,
       tokensOut: totals.tokensOut,
       reasoningTokens: totals.reasoningTokens,
-      costUsdMicros: totals.costUsdMicros,
+      costUsdMicros: state.accumulatedCostMicros,
     });
 
     await emit({
@@ -321,6 +324,7 @@ export async function runEngine(
 
   while (true) {
     const boardPng = renderBoardPng(buildBoardView(layout, legalPriorShots));
+    const turnStartedAt = now();
 
     try {
       const providerOutput = await deps.provider.call(
@@ -330,6 +334,7 @@ export async function runEngine(
           boardPng,
           shipsRemaining: shipsRemaining(layout, legalPriorShots),
           systemPrompt: SYSTEM_PROMPT,
+          ...(input.mockCostUsd === undefined ? {} : { mockCostUsd: input.mockCostUsd }),
           priorShots: legalPriorShots,
           seedDate: input.seedDate,
         },
@@ -342,8 +347,6 @@ export async function runEngine(
         totals.reasoningTokens,
         providerOutput.reasoningTokens,
       );
-      totals.costUsdMicros += providerOutput.costUsdMicros;
-
       const classified = classifyShot(
         layout,
         legalPriorShots,
@@ -362,6 +365,7 @@ export async function runEngine(
           classified.reasoningText === null
             ? null
             : truncateText(classified.reasoningText, REASONING_TEXT_LIMIT),
+        llmError: null,
         tokensIn: providerOutput.tokensIn,
         tokensOut: providerOutput.tokensOut,
         reasoningTokens: providerOutput.reasoningTokens,
@@ -393,12 +397,14 @@ export async function runEngine(
         legalPriorShots.push(classified.legalShot);
       }
 
-      const reduced = reduceOutcome(state, classified.event);
+      const reduced = reduceOutcome(
+        state,
+        { ...classified.event, costUsdMicros: providerOutput.costUsdMicros },
+        { budgetMicros: budgetUsdMicros },
+      );
       state = reduced.state;
 
-      const outcome =
-        reduced.outcome ??
-        (budgetUsdMicros !== null && totals.costUsdMicros > budgetUsdMicros ? "dnf_budget" : null);
+      const outcome = reduced.outcome;
 
       if (outcome !== null) {
         return await finalize(outcome, now());
@@ -412,6 +418,57 @@ export async function runEngine(
 
         state = reduceOutcome(state, { kind: "abort", reason }).state;
         return await finalize("aborted_viewer", now());
+      }
+
+      if (isProviderError(error)) {
+        if (error.kind === "unreachable") {
+          return await finalize("llm_unreachable", now());
+        }
+
+        const createdAt = now();
+        const llmError = serializeProviderError(error);
+
+        deps.queries.appendShot({
+          runId,
+          idx: shotIndex,
+          row: null,
+          col: null,
+          result: "schema_error",
+          rawResponse: "",
+          reasoningText: null,
+          llmError,
+          tokensIn: 0,
+          tokensOut: 0,
+          reasoningTokens: null,
+          costUsdMicros: 0,
+          durationMs: createdAt - turnStartedAt,
+          createdAt,
+        });
+
+        await emit({
+          kind: "shot",
+          id: 0,
+          idx: shotIndex,
+          row: null,
+          col: null,
+          result: "schema_error",
+          reasoning: null,
+        });
+
+        shotIndex += 1;
+
+        const reduced = reduceOutcome(
+          state,
+          { kind: "schema_error", costUsdMicros: 0 },
+          { budgetMicros: budgetUsdMicros },
+        );
+        state = reduced.state;
+
+        if (reduced.outcome !== null) {
+          return await finalize(reduced.outcome, now());
+        }
+
+        continue;
       }
 
       if (isNonRetriable4xx(error)) {

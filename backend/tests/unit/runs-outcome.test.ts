@@ -83,4 +83,94 @@ describe("reduceOutcome", () => {
       "aborted_server_restart",
     );
   });
+
+  test("tracks accumulated cost and maps over-budget events to dnf_budget", () => {
+    const reduced = reduceOutcome(
+      initialRunLoopState(),
+      {
+        kind: "miss",
+        costUsdMicros: 101,
+      },
+      { budgetMicros: 100 },
+    );
+
+    expect(reduced.state.accumulatedCostMicros).toBe(101);
+    expect(reduced.outcome).toBe("dnf_budget");
+  });
+
+  test("budget met exactly triggers dnf_budget", () => {
+    const reduced = reduceOutcome(
+      initialRunLoopState(),
+      {
+        kind: "miss",
+        costUsdMicros: 40_000,
+      },
+      { budgetMicros: 40_000 },
+    );
+
+    expect(reduced.outcome).toBe("dnf_budget");
+  });
+
+  test("null and zero budgets never trigger dnf_budget", () => {
+    expect(
+      reduceOutcome(
+        initialRunLoopState(),
+        {
+          kind: "miss",
+          costUsdMicros: 1_000_000,
+        },
+        { budgetMicros: null },
+      ).outcome,
+    ).toBe(null);
+    expect(
+      reduceOutcome(
+        initialRunLoopState(),
+        {
+          kind: "miss",
+          costUsdMicros: 1_000_000,
+        },
+        { budgetMicros: 0 },
+      ).outcome,
+    ).toBe(null);
+  });
+
+  test("terminal priority prefers win over budget on the same event", () => {
+    let state = initialRunLoopState();
+    for (let index = 0; index < 16; index += 1) {
+      state = reduceOutcome(state, { kind: "hit", costUsdMicros: 0 }, { budgetMicros: 1 }).state;
+    }
+
+    const reduced = reduceOutcome(
+      state,
+      {
+        kind: "sunk",
+        costUsdMicros: 2,
+      },
+      { budgetMicros: 1 },
+    );
+
+    expect(reduced.outcome).toBe("won");
+  });
+
+  test("terminal priority prefers schema-error DNF over budget on the same event", () => {
+    let state = initialRunLoopState();
+    for (let index = 0; index < 4; index += 1) {
+      state = reduceOutcome(
+        state,
+        { kind: "schema_error", costUsdMicros: 0 },
+        { budgetMicros: 1 },
+      ).state;
+    }
+
+    const reduced = reduceOutcome(
+      state,
+      {
+        kind: "schema_error",
+        costUsdMicros: 2,
+      },
+      { budgetMicros: 1 },
+    );
+
+    expect(reduced.outcome).toBe("dnf_schema_errors");
+  });
 });

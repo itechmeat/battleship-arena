@@ -46,6 +46,7 @@ describe("createQueries", () => {
         result: "miss",
         rawResponse: "{}",
         reasoningText: null,
+        llmError: null,
         tokensIn: 0,
         tokensOut: 0,
         reasoningTokens: null,
@@ -61,6 +62,7 @@ describe("createQueries", () => {
         result: "hit",
         rawResponse: "{}",
         reasoningText: null,
+        llmError: null,
         tokensIn: 0,
         tokensOut: 0,
         reasoningTokens: null,
@@ -70,6 +72,41 @@ describe("createQueries", () => {
       });
 
       expect(queries.listShots("run-1").map((shot) => shot.idx)).toEqual([0, 1]);
+    });
+  });
+
+  test("appendShot and listShots preserve provider error text", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      queries.insertRun({
+        id: "run-1",
+        seedDate: "2026-04-21",
+        providerId: "mock",
+        modelId: "mock-happy",
+        displayName: "Mock happy",
+        startedAt: 100,
+        clientSession: "session-1",
+        budgetUsdMicros: null,
+      });
+
+      queries.appendShot({
+        runId: "run-1",
+        idx: 0,
+        row: null,
+        col: null,
+        result: "schema_error",
+        rawResponse: "",
+        reasoningText: null,
+        llmError: "provider_5xx: upstream failed",
+        tokensIn: 0,
+        tokensOut: 0,
+        reasoningTokens: null,
+        costUsdMicros: 0,
+        durationMs: 5,
+        createdAt: 105,
+      });
+
+      expect(queries.listShots("run-1")[0]?.llmError).toBe("provider_5xx: upstream failed");
     });
   });
 

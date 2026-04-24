@@ -45,6 +45,7 @@ export const runShots = sqliteTable(
     result: text("result").notNull(),
     rawResponse: text("raw_response").notNull(),
     reasoningText: text("reasoning_text"),
+    llmError: text("llm_error"),
     tokensIn: integer("tokens_in").notNull(),
     tokensOut: integer("tokens_out").notNull(),
     reasoningTokens: integer("reasoning_tokens"),
