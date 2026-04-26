@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { renderBoardSvg, type RunShotRow } from "@battleship-arena/shared";
 import { createMemo } from "solid-js";
 

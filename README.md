@@ -8,13 +8,38 @@ The model is the player. The human is the spectator who brings an API key, picks
 
 Most public LLM benchmarks grade one-shot trivia against a static answer key, leak into training data, and hide the part that actually matters: how a model behaves over many turns, with imperfect information, a visual input, and a strict output contract it must keep honoring or lose the game.
 
-Battleship exposes exactly those behaviors. Spatial reasoning from an image, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all in a game anyone can read at a glance. One board is generated per UTC day and is identical for every player in the world that day; scores are pinned to the provider's exact model ID so historical numbers stay meaningful when a model is silently updated behind the same display name.
+Battleship exposes exactly those behaviors. Spatial reasoning from a compact board state, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all in a game anyone can read at a glance. One board is generated per UTC day and is identical for every player in the world that day; scores are pinned to the provider's exact model ID so historical numbers stay meaningful when a model is silently updated behind the same display name.
 
 Full product framing: see [`docs/about.md`](./docs/about.md).
 
 ## Status
 
-Pre-implementation. The foundation is done - the product is fully specified, the architecture and the story-level plan are written, and the repository is ready for the first vertical slice of work. No application code has been committed yet.
+Implementation is underway. The S3 OpenSpec change adds real provider adapters, pricing, budget handling, provider catalog APIs, leaderboard aggregation, board previews, and replay surfaces.
+
+## Local environment
+
+Copy `.env.example` to `.env.local` for local development, then replace the placeholders before using real providers:
+
+```sh
+cp .env.example .env.local
+
+OPENROUTER_API_KEY=replace-with-openrouter-key
+OPENCODE_GO_API_KEY=replace-with-opencode-go-key
+ZAI_API_KEY=replace-with-zai-key
+```
+
+Set `DATABASE_PATH` in your shell or service environment when running the backend, for example `DATABASE_PATH=/tmp/battleship-arena-dev.db`.
+
+The app does not need server-side provider keys for normal user-started runs because users paste their own key in `/play`. The placeholders are for manual real-token smoke checks:
+
+```sh
+bun run --cwd backend smoke:real-keys --provider openrouter --dry-run
+bun run --cwd backend smoke:real-keys --provider zai --dry-run
+```
+
+## API docs
+
+With the backend running, open [`/api/docs`](http://localhost:8081/api/docs) in a browser for an interactive Swagger UI covering every route. The raw OpenAPI 3.1 document is at [`/api/openapi.json`](http://localhost:8081/api/openapi.json); the source lives in `backend/src/api/openapi.ts`. Use the Swagger UI's "Try it out" button to fire calls from the browser - the `POST /api/runs` form accepts your own provider key the same way `/play` does.
 
 ## Documentation
 

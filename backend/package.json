@@ -8,10 +8,12 @@
     "build": "bun build ./src/index.ts --target bun --outdir ./dist && rm -rf ./dist/db/migrations && mkdir -p ./dist/db && cp -R ./src/db/migrations ./dist/db/migrations",
     "typecheck": "tsc --noEmit",
     "test": "DATABASE_PATH=:memory: bun test",
+    "smoke:real-keys": "bun run ./scripts/smoke-real-keys.ts",
     "drizzle:generate": "drizzle-kit generate --config=./drizzle.config.ts"
   },
   "dependencies": {
     "@battleship-arena/shared": "workspace:*",
+    "@hono/swagger-ui": "0.6.1",
     "@resvg/resvg-js": "2.6.2",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.14"

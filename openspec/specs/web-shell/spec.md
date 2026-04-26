@@ -140,12 +140,57 @@ The service worker SHALL never cache leaderboard data, run state, shot lists, SS
 
 ### Requirement: /play page with provider + model picker, API key, budget, submit
 
-The `web/` workspace SHALL add `web/src/pages/play.astro` that renders a single `<StartRunForm client:load>` Solid island. The island MUST expose four controls: a provider `<select>` (S2a: only `mock` available), a model `<select>` (S2a: `mock-happy` default, `mock-misses`, `mock-schema-errors`), a password-type API key input with `autocomplete="off"` and no default value, a number input for budget (optional, positive). On submit the island MUST call `startRun({ providerId, modelId, apiKey, budgetUsd? })` via `lib/api.ts`, navigate to `/runs/<runId>` on success, and display the server's error message inline on failure. The submit button MUST gain `aria-busy` and the `disabled` attribute during an in-flight request.
+The `web/` workspace SHALL add `web/src/pages/play.astro` that renders a single `<StartRunForm client:load>` Solid island. The island MUST expose four controls: a provider `<select>`, a model `<select>`, a password-type API key input with `autocomplete="off"` and no default value, and a number input for budget. The provider and model options MUST be populated at hydration time from a `GET /api/providers` fetch; the built bundle MUST NOT carry a hardcoded real-provider or real-model catalog beyond what the endpoint returns. In development, staging, and test builds the island MAY initially render a synthetic mock placeholder while the real catalog loads, but once `GET /api/providers` resolves it MUST prefer the first live provider over that placeholder when live providers are available. Changing the selected provider MUST switch the model selection to that provider's first available model so the submitted `modelId` always belongs to the selected provider. The synthetic `mock` option MUST be injected client-side when, and only when, `import.meta.env.MODE` is exactly one of the strings `"staging"`, `"development"`, or `"test"` (checked with strict equality against an explicit three-value whitelist; any other mode value, including `"production"`, `"preview"`, `"qa"`, or any custom mode, MUST NOT inject the option). The synthetic option carries three S2-era model variants (`mock-happy`, `mock-misses`, `mock-schema-errors`) and MUST NOT come from `GET /api/providers`; the backend never returns a `mock` provider entry, and the gating is entirely a client-side build-mode decision. The budget input MUST accept an optional non-negative decimal value; empty and `0` MUST be treated as absent by the submit handler (no `budgetUsd` field sent in the request body), while negative values MUST block submission client-side without issuing any `startRun` call. On submit the island MUST call `startRun({ providerId, modelId, apiKey, budgetUsd? })` via `lib/api.ts`, navigate to `/runs/<runId>` on success, and display the server's error message inline on failure. The submit button MUST gain `aria-busy` and the `disabled` attribute during an in-flight request.
 
-#### Scenario: Submit with mock-happy navigates to the run page
+#### Scenario: Provider and model selects populate from GET /api/providers
 
-- **WHEN** a user opens `/play`, selects `mock` and `mock-happy`, enters a non-empty API key, and clicks Start
+- **WHEN** a user lands on `/play` and the `GET /api/providers` response contains two real providers, each with their own models
+- **THEN** the provider `<select>` renders exactly those two providers in the order returned and the model `<select>` renders the models for the initially selected provider, with no extra entries from any hardcoded bundle list
+
+#### Scenario: Loaded live catalog replaces the mock placeholder
+
+- **WHEN** `/play` hydrates in a mock-enabled build and `GET /api/providers` returns at least one live provider
+- **THEN** the selected provider/model move from the initial mock placeholder to the first live provider and its first model
+
+#### Scenario: Changing provider selects that provider's first model
+
+- **WHEN** a user selects provider `A`, picks model `A-m1`, then switches the provider `<select>` to `B`
+- **THEN** the model `<select>` re-renders with provider `B`'s models and the selected `modelId` in the form state becomes provider `B`'s first model, never retaining `A-m1`
+
+#### Scenario: Staging build exposes the mock option
+
+- **WHEN** `/play` hydrates under `import.meta.env.MODE === "staging"`
+- **THEN** the provider `<select>` contains an additional `mock` entry alongside the entries returned by `GET /api/providers`, and selecting it populates the model `<select>` with `mock-happy`, `mock-misses`, and `mock-schema-errors`
+
+#### Scenario: Production build hides the mock option
+
+- **WHEN** `/play` hydrates under `import.meta.env.MODE === "production"`
+- **THEN** the provider `<select>` contains no `mock` entry regardless of whether `GET /api/providers` would have included one
+
+#### Scenario: Submit with a real provider navigates to the run page
+
+- **WHEN** a user opens `/play`, selects a real provider and one of its models, enters a non-empty API key, and clicks Start
 - **THEN** the browser navigates to `/runs/<returned-runId>` after the backend returns 200
+
+#### Scenario: Submit with mock-happy on staging still navigates to the run page
+
+- **WHEN** a user on a staging build selects `mock` and `mock-happy`, enters a non-empty API key, and clicks Start
+- **THEN** the browser navigates to `/runs/<returned-runId>` after the backend returns 200
+
+#### Scenario: Empty budget input is treated as absent
+
+- **WHEN** a user submits the form with the budget field empty
+- **THEN** the `startRun` call body contains no `budgetUsd` field, and the backend persists `runs.budget_usd_micros` as `NULL`
+
+#### Scenario: Zero budget input is treated as absent
+
+- **WHEN** a user submits the form with the budget field set to `0`
+- **THEN** the `startRun` call body contains no `budgetUsd` field, and the backend persists `runs.budget_usd_micros` as `NULL`
+
+#### Scenario: Negative budget blocks submission
+
+- **WHEN** a user enters a negative number into the budget input, selects a valid provider and model, pastes a non-empty API key, and attempts to submit the form
+- **THEN** the island does not call `startRun`, does not navigate, surfaces inline validation feedback that the budget must be zero or a positive number, and leaves the submit button without the `aria-busy` attribute so the user can correct the value and retry
 
 #### Scenario: Server-side validation error renders inline
 
@@ -159,12 +204,22 @@ The `web/` workspace SHALL add `web/src/pages/play.astro` that renders a single 
 
 ### Requirement: /runs/:id page with live SSE view
 
-The `web/` workspace SHALL add `web/src/pages/runs/[id].astro` that renders `<LiveGame runId={id} client:load>`. The island MUST mount with a four-phase state machine (`loading`, `live`, `terminal`, `error`) backed by typed `GET /api/runs/:id`, `GET /api/runs/:id/shots`, and SSE subscription via `lib/sse.ts`. On mount the island MUST fetch run meta first; if `outcome !== null` it transitions directly to `terminal` after fetching shots; otherwise it hydrates shots then opens an `EventSource` to `/api/runs/:id/events?lastEventId=<latestIdx>`. The island MUST handle the SSE `resync` event by closing and re-running the mount sequence. The island MUST render the board via `<BoardView shots={shots()} />` and a small HUD showing shots/hits/schemaErrors/invalidCoordinates/outcome. The island MUST offer an Abort button while `phase === "live"` that calls `POST /api/runs/:id/abort`.
+The `web/` workspace SHALL add `web/src/pages/runs/[id].astro` that renders `<LiveGame runId={id} client:load>`. The island MUST mount with a four-phase state machine (`loading`, `live`, `terminal`, `error`) backed by typed `GET /api/runs/:id`, `GET /api/runs/:id/shots`, and SSE subscription via `lib/sse.ts`. On mount the island MUST fetch run meta first; if `outcome !== null` it transitions directly to `terminal` after fetching shots; otherwise it hydrates shots then opens an `EventSource` to `/api/runs/:id/events?lastEventId=<latestIdx>`. The island MUST handle the SSE `resync` event by closing and re-running the mount sequence. The island MUST render the board via `<BoardView shots={shots()} />` and a HUD showing shots, hits, schema errors, timeouts, invalid coordinates, elapsed time, live time since the last shot, token totals, reasoning-token totals, and cost. The island MUST offer an Abort button while `phase === "live"` that calls `POST /api/runs/:id/abort`.
 
 #### Scenario: Full mock-happy flow renders to terminal without reload
 
 - **WHEN** a user submits `/play` with `mock-happy` and is navigated to `/runs/<id>`
 - **THEN** the board updates incrementally as SSE events arrive and a terminal indicator reads `won` without any page reload
+
+#### Scenario: Live metrics separate timeouts from schema errors
+
+- **WHEN** the shot log contains both `schema_error` and `timeout` rows
+- **THEN** the live HUD displays separate counts for schema errors and timeouts while both rows still contribute to shots fired
+
+#### Scenario: Live resource metrics aggregate shot telemetry
+
+- **WHEN** shot rows or SSE shot events carry token, reasoning-token, cost, duration, and timestamp fields
+- **THEN** the live view aggregates token/cost totals and updates elapsed/since-shot timers without waiting for terminal metadata
 
 #### Scenario: Reload mid-run resumes from ring
 
@@ -183,7 +238,7 @@ The `web/` workspace SHALL add `web/src/pages/runs/[id].astro` that renders `<Li
 
 ### Requirement: BoardView island derives cells from shots (pure)
 
-The `web/` workspace SHALL expose a Solid `<BoardView shots={RunShotRow[]} />` island plus a pure helper `boardViewFromShots(shots)` that maps the shot list to a 100-cell `BoardView`. The helper MUST: place every `miss`, `hit`, and `sunk` shot at `row * 10 + col` (skipping rows with `null` row/col from schema errors); for every `sunk` result, upgrade adjacent `hit` cells in all four cardinal directions to `sunk` by flood along `row` or `col` until a non-`hit`/`sunk` cell is reached. The island MUST render by passing the derived view to the shared `renderBoardSvg` and injecting the SVG via `innerHTML`. No DOM-level state is held inside the helper.
+The `web/` workspace SHALL expose a Solid `<BoardView shots={RunShotRow[]} />` island plus a pure helper `boardViewFromShots(shots)` that maps the shot list to a 100-cell `BoardView`. The helper MUST: place every `miss`, `hit`, and `sunk` shot at `row * 10 + col` (skipping rows with `null` row/col from `schema_error` or `timeout` rows); for every `sunk` result, upgrade adjacent `hit` cells in all four cardinal directions to `sunk` by flood along `row` or `col` until a non-`hit`/`sunk` cell is reached. The island MUST render by passing the derived view to the shared `renderBoardSvg` and injecting the SVG via `innerHTML`. No DOM-level state is held inside the helper.
 
 #### Scenario: Empty shots yield all-unknown board
 
@@ -232,3 +287,96 @@ The `web/` workspace SHALL add `web/src/styles/play.module.css` and `web/src/sty
 
 - **WHEN** the rendered `/play` and `/runs/:id` pages are measured at any viewport width
 - **THEN** the main content column is at most 480px wide and is horizontally centered
+
+### Requirement: Start form persists API keys per provider
+
+The `/play` start form SHALL save API keys in browser `localStorage` by provider id after the API-key field change is committed by the browser `change` event or when the form is submitted, and prefill the API key input from the selected provider's saved value on initial render/load. Changing provider MUST swap the input value to that provider's saved key or an empty string. If browser storage is unavailable or disabled, the form MUST keep the typed key only in component state for the current page session and still allow starting a run. The UI copy MUST inform users that the key is stored locally for the selected provider.
+
+#### Scenario: Saved provider key prefills input
+
+- **WHEN** localStorage contains a key for the selected provider and the start form loads
+- **THEN** the API key input is prefilled with that saved value
+
+#### Scenario: Provider change swaps key value
+
+- **WHEN** a user changes from provider A to provider B
+- **THEN** the API key input changes to provider B's saved key, or empty if none exists
+
+### Requirement: Start form exposes Reasoning checkbox
+
+The `/play` start form SHALL include a Reasoning checkbox whose checked and disabled state derives from the selected model's `reasoningMode` metadata. The form MUST submit the resolved boolean value as `reasoningEnabled` in the `startRun` request body. For `optional` models, the submitted value MUST match the checkbox state. For `forced_on` and `forced_off` models, the checkbox MUST be disabled and the submitted `reasoningEnabled` value MUST match the forced model policy.
+
+#### Scenario: Optional model enables checkbox
+
+- **WHEN** the selected model has `reasoningMode === "optional"`
+- **THEN** the Reasoning checkbox is enabled, checked by default, and its submitted value is included in `startRun`
+
+#### Scenario: Forced model disables checkbox
+
+- **WHEN** the selected model has `reasoningMode === "forced_on"` or `"forced_off"`
+- **THEN** the checkbox is disabled and preset to the forced value
+
+### Requirement: Live page title and heading reflect run state
+
+The `/runs/:id` page SHALL update `document.title` as `<state>: <model> | BattleShipArena`, where `<state>` is `In progress` for a live run and `Finished` for a terminal run. The visible heading SHALL show `Battleship` with the model name on a new line in a smaller font size. The page SHALL show `Reasoning: <status>` below the model name at normal font size.
+
+#### Scenario: Live title shows in progress
+
+- **WHEN** a run has no terminal outcome
+- **THEN** the page title starts with `In progress: ` and includes the model display name
+
+#### Scenario: Terminal title shows finished
+
+- **WHEN** a run has a terminal outcome
+- **THEN** the page title starts with `Finished: ` and includes the model display name
+
+#### Scenario: Visible heading separates model name
+
+- **WHEN** run metadata has loaded
+- **THEN** the visible heading shows `Battleship` and renders the model name on the next line with smaller text
+
+#### Scenario: Reasoning appears under model name
+
+- **WHEN** run metadata has loaded
+- **THEN** the visible title area shows `Reasoning: On` or `Reasoning: Off`
+
+### Requirement: Missing run shows 404 page
+
+The `/runs/:id` client view SHALL show a 404-style not-found page when the run metadata endpoint returns `run_not_found`. It MUST NOT render the empty game board for missing runs.
+
+#### Scenario: Missing run does not show game board
+
+- **WHEN** `/api/runs/:id` returns 404 for the requested run
+- **THEN** the run page shows a not-found message and no game board or metrics grid
+
+### Requirement: Live game layout removes redundant model block and repositions abort
+
+The live game UI SHALL remove the bottom Model and Reasoning blocks. While live, the Abort button text SHALL be `Abort` and the button SHALL appear to the right of the timers pinned to the right edge of the timer row.
+
+#### Scenario: Abort button is short and aligned
+
+- **WHEN** a run is live
+- **THEN** the visible abort control reads `Abort` and appears on the right side of the timer row
+
+### Requirement: Displayed costs use thousandth precision utility
+
+The web UI SHALL use a shared utility to format displayed USD cost values. Non-finite, zero, and negative values MUST display `$0`; positive values below `$0.001` MUST display `<$0.001`; values at or above `$0.001` MUST display exactly three decimal places using JavaScript decimal rounding via `toFixed(3)`.
+
+#### Scenario: Cost rounds to thousandths
+
+- **WHEN** the utility formats `1234` USD micros
+- **THEN** it returns a display value rounded to `$0.001`
+
+#### Scenario: Tiny positive costs are explicit
+
+- **WHEN** the utility formats `1` USD micro or `999` USD micros
+- **THEN** it returns `<$0.001`
+
+### Requirement: Terminal run copy is concise
+
+The live page SHALL replace the verbose terminal message `Run complete. The board now reflects the terminal shot log. Open replay` with the shorter copy `Finished. Replay`, where `Replay` links to the run replay page.
+
+#### Scenario: Terminal copy is short
+
+- **WHEN** a run reaches terminal state
+- **THEN** the terminal message reads `Finished. Replay` and `Replay` links to replay

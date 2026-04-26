@@ -24,6 +24,17 @@ describe("isSseEvent", () => {
         reasoning: null,
       }),
     ).toBe(true);
+    expect(
+      isSseEvent({
+        kind: "shot",
+        id: 5,
+        idx: 1,
+        row: null,
+        col: null,
+        result: "timeout",
+        reasoning: null,
+      }),
+    ).toBe(true);
     expect(isSseEvent({ kind: "resync", id: 3 })).toBe(true);
     expect(
       isSseEvent({

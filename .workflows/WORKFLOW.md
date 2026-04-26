@@ -4,7 +4,7 @@
 
 - [ ] 🦊 Claude Code
 
-Let's run a brainstorm for implementing story S2 from the plan in docs/plan.md.
+Let's run a brainstorm for implementing story S3 from the plan in docs/plan.md.
 The project information is described in sufficient detail in the documents inside the docs folder.
 When you ask questions, always attach well-argued recommendations. After I pick an option, record the reasoning in the resulting brainstorm file as well: it must stay in the document.
 Remember: right now we are not writing code, we are planning.
@@ -13,13 +13,12 @@ ultrathink
 
 ## Review
 
-- [ ] 🤖 Github Copilot
+- [ ] 🤖 Codex
 
-docs/superpowers/specs/2026-04-21-s2a-game-loop-mock-design.md
-docs/superpowers/plans/2026-04-21-s2a-game-loop-mock.md
+docs/superpowers/plans/2026-04-24-s3-real-providers-pricing-leaderboard-replays.md
+docs/superpowers/specs/2026-04-24-s3-real-providers-pricing-leaderboard-replays-design.md
 Review this plan; if you have criticism or improvement ideas - tell me.
 Do not propose fixes and do not fix anything yourself, your job is review only.
-If ask_report returns an empty response - just repeat your report again, up to 3 times. Always answer in English.
 
 - [ ] 🦊 Claude Code
 
@@ -28,18 +27,17 @@ ultrathink
 
 - [ ] 🦊 Claude Code
 
-docs/superpowers/specs/2026-04-21-s2a-game-loop-mock-design.md
-docs/superpowers/plans/2026-04-21-s2a-game-loop-mock.md
+docs/superpowers/plans/2026-04-24-s3-real-providers-pricing-leaderboard-replays.md
+docs/superpowers/specs/2026-04-24-s3-real-providers-pricing-leaderboard-replays-design.md
 Based on this plan, let's start a new change following the openspec workflow.
 Produce all artifacts autonomously.
 If needed, spawn a dedicated agent per file to speed things up.
 ultrathink
 
-- [ ] 🤖 Github Copilot
+- [ ] 🤖 Codex
 
 Review the current openspec plan for the feature.
 This refers only to the contents of the openspec folder, nothing else.
-If ask_report returns an empty response - just repeat your report again, up to 3 times.
 
 - [ ] 🦊 Claude Code
 
@@ -48,33 +46,33 @@ ultrathink
 
 ## Implement
 
-- [ ] 🤖 Github Copilot
+- [ ] 🤖 Codex
 
 Start implementing the current openspec change following the openspec workflow.
 Work autonomously: you have all the documentation, so do not ask me about details. Your job is to implement the feature end-to-end.
-If ask_report returns an empty response - just keep going and pick your own path.
+If any secrets or API keys are required, create `.env` and `.env.local` with placeholder values and document in `readme.md` how to replace them with real keys.
+When done, run `make fix` and make sure every issue is resolved; fix anything left manually.
 
 ## Review
 
-- [ ] 🤖 Github Copilot
+- [x] 🤖 Codex
 
 Run a self-review (without CodeRabbit) of the changes introduced to the project (diff) to check whether everything matches a senior level of development, the correctness of the architectural decisions taken, and best practices. If you see something that should be fixed - fix it yourself, autonomously, without extra questions.
-ask_report is required.
+When done, run `make fix` and make sure every issue is resolved; fix anything left manually.
 
-- [ ] 🦊 Claude Code
+- [x] 🦊 Claude Code
 
 Use superpowers to review the implementation of the current openspec change.
 If the diff is large, you may split it across several sub-agents.
 Changing code is forbidden - I expect review only!
-Also, extra work was done beyond what was planned - it must be covered too.
 ultrathink
 
-- [ ] 🤖 Github Copilot
+- [x] 🤖 Codex
 
 I have a review of the implementation of the current openspec change; the decision to follow the reviewer's recommendations or not is yours.
-ask_report is required.
+When done, run `make fix` and make sure every issue is resolved; fix anything left manually.
 
-- [ ] 🦊 Claude Code
+- [-] 🦊 Claude Code
 
 Archive the current openspec change.
 If needed, without asking me, sync delta specs into main specs.
@@ -83,7 +81,7 @@ ultrathink
 
 ## CodeRabbit
 
-- [ ] 🤖 Github Copilot
+- [ ] 🤖 Codex
 
 I have a review from CodeRabbit; the decision to follow the reviewer's recommendations or not is yours.
-If ask_report returns an empty response - just keep going and pick your own path.
+When done, run `make fix` and make sure every issue is resolved; fix anything left manually.

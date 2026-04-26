@@ -1,20 +1,32 @@
+import type { ReasoningMode } from "@battleship-arena/shared";
+
 export interface ProviderModel {
   id: string;
   displayName: string;
   hasReasoning: boolean;
+  reasoningMode: ReasoningMode;
 }
 
 export interface ProviderCallInput {
   modelId: string;
   apiKey: string;
-  boardPng: Uint8Array;
+  reasoningEnabled?: boolean;
+  boardText: string;
+  /**
+   * PNG rendering kept for vision-based fallback. Currently unused: the active code path
+   * sends `boardText` only. Re-enable in providers/openai-compatible.ts when revisiting
+   * the vision benchmark track.
+   */
+  boardPng?: Uint8Array;
   shipsRemaining: readonly string[];
   systemPrompt: string;
+  mockCostUsd?: number;
   priorShots: readonly {
     row: number;
     col: number;
     result: "hit" | "miss" | "sunk";
   }[];
+  consecutiveSchemaErrors?: number;
   seedDate: string;
 }
 
@@ -30,6 +42,11 @@ export interface ProviderCallOutput {
 export interface ProviderAdapter {
   readonly id: string;
   readonly models: readonly ProviderModel[];
+  /**
+   * Performs exactly one provider round trip. Implementations throw ProviderError
+   * with kind "transient" or "unreachable" for provider/auth/transport failures
+   * and never include API keys in errors.
+   */
   call(input: ProviderCallInput, signal: AbortSignal): Promise<ProviderCallOutput>;
 }
 

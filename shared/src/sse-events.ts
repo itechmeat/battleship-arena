@@ -7,6 +7,7 @@ const SHOT_RESULTS: readonly ShotResult[] = [
   "sunk",
   "schema_error",
   "invalid_coordinate",
+  "timeout",
 ];
 
 export interface SseOpenEvent {
@@ -25,6 +26,12 @@ export interface SseShotEvent {
   col: number | null;
   result: ShotResult;
   reasoning: string | null;
+  tokensIn?: number;
+  tokensOut?: number;
+  reasoningTokens?: number | null;
+  costUsdMicros?: number;
+  durationMs?: number;
+  createdAt?: number;
 }
 
 export interface SseResyncEvent {
@@ -63,6 +70,16 @@ function isShotResult(value: unknown): value is ShotResult {
   return typeof value === "string" && SHOT_RESULTS.includes(value as ShotResult);
 }
 
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isOptionalNullableNumber(value: unknown): boolean {
+  return (
+    value === undefined || value === null || (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
 export function isSseEvent(value: unknown): value is SseEvent {
   if (!isObject(value) || typeof value.kind !== "string" || !hasNumericId(value)) {
     return false;
@@ -81,7 +98,13 @@ export function isSseEvent(value: unknown): value is SseEvent {
         isNullableNumber(value.row) &&
         isNullableNumber(value.col) &&
         isShotResult(value.result) &&
-        (value.reasoning === null || typeof value.reasoning === "string")
+        (value.reasoning === null || typeof value.reasoning === "string") &&
+        isOptionalNumber(value.tokensIn) &&
+        isOptionalNumber(value.tokensOut) &&
+        isOptionalNullableNumber(value.reasoningTokens) &&
+        isOptionalNumber(value.costUsdMicros) &&
+        isOptionalNumber(value.durationMs) &&
+        isOptionalNumber(value.createdAt)
       );
     case "resync":
       return true;

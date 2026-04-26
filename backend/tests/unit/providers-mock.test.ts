@@ -3,11 +3,12 @@ import { describe, expect, test } from "bun:test";
 import { parseShot } from "@battleship-arena/shared";
 
 import { generateBoard } from "../../src/board/generator.ts";
+import { ProviderError } from "../../src/providers/errors.ts";
 import { createMockProvider } from "../../src/providers/mock.ts";
 
 const baseInput = {
   apiKey: "k",
-  boardPng: new Uint8Array(),
+  boardText: "",
   shipsRemaining: [],
   systemPrompt: "",
   priorShots: [],
@@ -148,12 +149,39 @@ describe("createMockProvider", () => {
     }
   });
 
+  test("test options can inject usage, cost, and failures", async () => {
+    const provider = createMockProvider({
+      delayMs: 0,
+      testHooks: {
+        tokensIn: 11,
+        tokensOut: 7,
+        reasoningTokens: 3,
+        costUsdMicros: 42,
+      },
+    });
+    const output = await provider.call(
+      { ...baseInput, modelId: "mock-happy" },
+      new AbortController().signal,
+    );
+
+    expect(output.tokensIn).toBe(11);
+    expect(output.tokensOut).toBe(7);
+    expect(output.reasoningTokens).toBe(3);
+    expect(output.costUsdMicros).toBe(42);
+    await expect(
+      createMockProvider({ delayMs: 0, testHooks: { failure: "transient" } }).call(
+        { ...baseInput, modelId: "mock-happy" },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ kind: "transient" });
+  });
+
   test("rejects an unknown model id", async () => {
     const mock = createMockProvider({ delayMs: 0 });
 
     await expect(
       mock.call({ ...baseInput, modelId: "unknown-model" }, new AbortController().signal),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(ProviderError);
   });
 
   test("aborts promptly during sleep", async () => {

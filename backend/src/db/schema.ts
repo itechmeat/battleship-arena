@@ -8,6 +8,9 @@ export const runs = sqliteTable(
     providerId: text("provider_id").notNull(),
     modelId: text("model_id").notNull(),
     displayName: text("display_name").notNull(),
+    reasoningEnabled: integer("reasoning_enabled", {
+      mode: "boolean",
+    }).notNull(),
     startedAt: integer("started_at").notNull(),
     endedAt: integer("ended_at"),
     outcome: text("outcome"),
@@ -45,6 +48,7 @@ export const runShots = sqliteTable(
     result: text("result").notNull(),
     rawResponse: text("raw_response").notNull(),
     reasoningText: text("reasoning_text"),
+    llmError: text("llm_error"),
     tokensIn: integer("tokens_in").notNull(),
     tokensOut: integer("tokens_out").notNull(),
     reasoningTokens: integer("reasoning_tokens"),

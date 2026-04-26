@@ -1,6 +1,8 @@
 ---
 import type { HealthResponse } from "@battleship-arena/shared";
 
+import Leaderboard from "../islands/Leaderboard.tsx";
+
 const healthStatus: HealthResponse["status"] = "ok";
 const shouldRegisterServiceWorker = import.meta.env.PROD;
 ---
@@ -13,13 +15,75 @@ const shouldRegisterServiceWorker = import.meta.env.PROD;
     <meta name="theme-color" content="#0f766e" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>BattleShipArena</title>
+    <style is:global>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        display: grid;
+        gap: 2rem;
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0 3rem;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .brand {
+        margin: 0;
+        font-size: clamp(1.8rem, 3vw, 3rem);
+        line-height: 1;
+      }
+
+      .playLink {
+        border-radius: 8px;
+        background: #0f766e;
+        color: #ffffff;
+        padding: 0.7rem 0.95rem;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .panel {
+        border: 1px solid #dbe3ea;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 1rem;
+      }
+
+      .sectionTitle {
+        margin: 0 0 0.8rem;
+        font-size: 1rem;
+      }
+
+    </style>
   </head>
   <body>
     <main>
-      <h1>BattleShipArena</h1>
-      <p data-health-status={healthStatus}>
-        Mobile-first Battleship benchmark shell. Game logic and live runs land in later stories.
-      </p>
+      <div class="topbar">
+        <h1 class="brand">BattleShipArena</h1>
+        <a class="playLink" href="/play">Start run</a>
+      </div>
+      <section class="panel">
+        <h2 class="sectionTitle">Leaderboard</h2>
+        <div data-leaderboard-skeleton>
+          <Leaderboard client:load />
+        </div>
+      </section>
+      <p data-health-status={healthStatus} hidden>ok</p>
     </main>
 
     <script is:inline define:vars={{ shouldRegisterServiceWorker }}>

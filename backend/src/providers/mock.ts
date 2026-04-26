@@ -2,23 +2,36 @@ import { MOCK_TURN_DELAY_MS_DEFAULT } from "@battleship-arena/shared";
 
 import { generateBoard } from "../board/generator.ts";
 
-import type { ProviderAdapter, ProviderCallInput, ProviderModel } from "./types.ts";
+import { ProviderError } from "./errors.ts";
+import type {
+  ProviderAdapter,
+  ProviderCallInput,
+  ProviderCallOutput,
+  ProviderModel,
+} from "./types.ts";
 
 // TODO(2026-05, s3-real-providers): Remove this dev/test-only adapter and MODELS catalog
 // once real providers ship. Until then, keep mock registration behind non-production flows
 // and exclude it from production-facing provider selection and documentation.
 
 const MODELS: readonly ProviderModel[] = [
-  { id: "mock-happy", displayName: "Mock - winning run", hasReasoning: false },
+  {
+    id: "mock-happy",
+    displayName: "Mock - winning run",
+    hasReasoning: false,
+    reasoningMode: "forced_off",
+  },
   {
     id: "mock-misses",
     displayName: "Mock - always misses",
     hasReasoning: false,
+    reasoningMode: "forced_off",
   },
   {
     id: "mock-schema-errors",
     displayName: "Mock - schema errors",
     hasReasoning: false,
+    reasoningMode: "forced_off",
   },
 ];
 
@@ -133,7 +146,49 @@ function nextMissShot(input: ProviderCallInput): { row: number; col: number } {
   return { row: 0, col: 0 };
 }
 
-export function createMockProvider(options: { delayMs?: number } = {}): ProviderAdapter {
+export interface MockProviderTestHooks {
+  costUsdMicros?: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  reasoningTokens?: number | null;
+  failure?: "transient" | "unreachable" | null;
+  beforeCall?: (input: ProviderCallInput) => void | Promise<void>;
+  afterCall?: (output: ProviderCallOutput, input: ProviderCallInput) => void | Promise<void>;
+}
+
+function testHookFailure(kind: "transient" | "unreachable"): ProviderError {
+  if (kind === "transient") {
+    return new ProviderError({
+      kind,
+      code: "provider_5xx",
+      providerId: "mock",
+      message: "Mock transient provider failure",
+      status: 503,
+      cause: "mock transient failure",
+    });
+  }
+
+  return new ProviderError({
+    kind,
+    code: "auth",
+    providerId: "mock",
+    message: "Mock unreachable provider failure",
+    status: 401,
+    cause: "mock unreachable failure",
+  });
+}
+
+export function createMockProvider(
+  options: {
+    delayMs?: number;
+    costUsdMicros?: number;
+    tokensIn?: number;
+    tokensOut?: number;
+    reasoningTokens?: number | null;
+    failure?: Error;
+    testHooks?: MockProviderTestHooks;
+  } = {},
+): ProviderAdapter {
   const delayMs = options.delayMs ?? MOCK_TURN_DELAY_MS_DEFAULT;
 
   return {
@@ -141,6 +196,14 @@ export function createMockProvider(options: { delayMs?: number } = {}): Provider
     models: MODELS,
     async call(input, signal) {
       const startedAt = Date.now();
+      await options.testHooks?.beforeCall?.(input);
+      if (options.testHooks?.failure !== undefined && options.testHooks.failure !== null) {
+        throw testHookFailure(options.testHooks.failure);
+      }
+      if (options.failure !== undefined) {
+        throw options.failure;
+      }
+
       await sleep(delayMs, signal);
 
       let rawText: string;
@@ -158,17 +221,31 @@ export function createMockProvider(options: { delayMs?: number } = {}): Provider
           break;
         }
         default:
-          throw new Error(`Unknown mock model: ${input.modelId}`);
+          throw new ProviderError({
+            kind: "unreachable",
+            code: "unsupported_model",
+            providerId: "mock",
+            message: "Mock model is not supported",
+            status: 400,
+            cause: input.modelId,
+          });
       }
 
-      return {
+      const output: ProviderCallOutput = {
         rawText,
-        tokensIn: 0,
-        tokensOut: 0,
-        reasoningTokens: null,
-        costUsdMicros: 0,
+        tokensIn: options.testHooks?.tokensIn ?? options.tokensIn ?? 0,
+        tokensOut: options.testHooks?.tokensOut ?? options.tokensOut ?? 0,
+        reasoningTokens: options.testHooks?.reasoningTokens ?? options.reasoningTokens ?? null,
+        costUsdMicros:
+          input.mockCostUsd === undefined
+            ? (options.testHooks?.costUsdMicros ?? options.costUsdMicros ?? 0)
+            : Math.floor(input.mockCostUsd * 1_000_000),
         durationMs: Date.now() - startedAt,
       };
+
+      await options.testHooks?.afterCall?.(output, input);
+
+      return output;
     },
   };
 }

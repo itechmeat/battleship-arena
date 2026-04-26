@@ -37,7 +37,7 @@ The backend SHALL expose a `generateBoard(seedDate)` function that returns a ful
 
 ### Requirement: Shared SVG board template consumed by server and client
 
-The `@battleship-arena/shared` package SHALL export a pure function `renderBoardSvg(view: BoardView): string` that maps a 100-cell `BoardView` (row-major, cells drawn from `"unknown" | "miss" | "hit" | "sunk"`) to a deterministic SVG string. The SVG MUST have a fixed viewBox of `0 0 640 640` with 64px cells, MUST NOT contain any `<text>` element (the model input never carries coordinate text per `docs/spec.md` 3.3), and MUST render each cell state with closed geometry only (rectangles, circles, rotated rectangles) so the downstream PNG converter produces byte-stable output. The same template MUST be imported and rendered directly by the web `BoardView` island to keep the server-facing model view and the user-facing viewer view byte-identical.
+The `@battleship-arena/shared` package SHALL export a pure function `renderBoardSvg(view: BoardView): string` that maps a 100-cell `BoardView` (row-major, cells drawn from `"unknown" | "miss" | "hit" | "sunk"`) to a deterministic SVG string. The SVG MUST have a fixed viewBox of `0 0 640 640` with 64px cells, MUST NOT contain any `<text>` element, and MUST render each cell state with closed geometry only (rectangles, circles, rotated rectangles) so the downstream PNG converter produces byte-stable output. The same template MUST be imported and rendered directly by the web `BoardView` island to keep the user-facing viewer and PNG preview rendering byte-identical.
 
 #### Scenario: SVG omits text nodes
 

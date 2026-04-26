@@ -14,6 +14,26 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const COLUMN_LETTER_RE = /^([A-J])(0?[1-9]|10)$/i;
+
+function parseCellNotation(cell: string): { row: number; col: number } | null {
+  const match = COLUMN_LETTER_RE.exec(cell.trim());
+  if (match === null) {
+    return null;
+  }
+
+  const letter = match[1];
+  const number = match[2];
+  if (letter === undefined || number === undefined) {
+    return null;
+  }
+
+  const col = letter.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+  const row = Number(number) - 1;
+
+  return { row, col };
+}
+
 export function parseShot(rawText: string): ParseShotResult {
   let parsed: unknown;
 
@@ -27,15 +47,26 @@ export function parseShot(rawText: string): ParseShotResult {
     return { kind: "schema_error" };
   }
 
-  const row = parsed.row;
-  const col = parsed.col;
   const reasoning = parsed.reasoning;
-
-  if (!isInteger(row) || !isInteger(col)) {
+  if (reasoning !== undefined && typeof reasoning !== "string") {
     return { kind: "schema_error" };
   }
 
-  if (reasoning !== undefined && typeof reasoning !== "string") {
+  let row: number;
+  let col: number;
+
+  if (typeof parsed.cell === "string") {
+    const coords = parseCellNotation(parsed.cell);
+    if (coords === null) {
+      return { kind: "schema_error" };
+    }
+
+    row = coords.row;
+    col = coords.col;
+  } else if (isInteger(parsed.row) && isInteger(parsed.col)) {
+    row = parsed.row;
+    col = parsed.col;
+  } else {
     return { kind: "schema_error" };
   }
 

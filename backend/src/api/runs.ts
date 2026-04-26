@@ -61,6 +61,12 @@ function synthesizeTerminalReplay(deps: RunsRouterDeps, runId: string): SseEvent
       col: shot.col,
       result: shot.result,
       reasoning: shot.reasoningText,
+      tokensIn: shot.tokensIn,
+      tokensOut: shot.tokensOut,
+      reasoningTokens: shot.reasoningTokens,
+      costUsdMicros: shot.costUsdMicros,
+      durationMs: shot.durationMs,
+      createdAt: shot.createdAt,
     })),
     {
       kind: "outcome",
@@ -91,11 +97,29 @@ function readRequiredString(
 
 function readOptionalBudgetUsd(body: Record<string, unknown>): number | undefined | null {
   const value = body.budgetUsd;
-  if (value === undefined) {
+  if (value === undefined || value === null || value === 0) {
     return undefined;
   }
 
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function readOptionalMockCostUsd(body: Record<string, unknown>): number | undefined | null {
+  const value = body.mockCost;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function readOptionalReasoningEnabled(body: Record<string, unknown>): boolean | undefined | null {
+  const value = body.reasoningEnabled;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return typeof value === "boolean" ? value : null;
 }
 
 export function createRunsRouter(deps: RunsRouterDeps) {
@@ -316,11 +340,26 @@ export function createRunsRouter(deps: RunsRouterDeps) {
       });
     }
 
-    if (!provider.models.some((model) => model.id === modelId)) {
+    const model = provider.models.find((candidate) => candidate.id === modelId);
+    if (model === undefined) {
       return respondError(context, "invalid_input", 400, "Invalid input", {
         field: "modelId",
       });
     }
+
+    const requestedReasoningEnabled = readOptionalReasoningEnabled(body);
+    if (requestedReasoningEnabled === null) {
+      return respondError(context, "invalid_input", 400, "Invalid input", {
+        field: "reasoningEnabled",
+      });
+    }
+
+    const reasoningEnabled =
+      model.reasoningMode === "forced_on"
+        ? true
+        : model.reasoningMode === "forced_off"
+          ? false
+          : (requestedReasoningEnabled ?? true);
 
     const apiKey = readRequiredString(body, "apiKey");
     if (apiKey === null) {
@@ -336,14 +375,25 @@ export function createRunsRouter(deps: RunsRouterDeps) {
       });
     }
 
+    const mockCostUsd = readOptionalMockCostUsd(body);
+    if (mockCostUsd === null) {
+      return respondError(context, "invalid_input", 400, "Invalid input", {
+        field: "mockCost",
+      });
+    }
+
+    const canUseMockCost = providerId === "mock" && process.env.NODE_ENV !== "production";
+
     const clientSession = readSession(context);
     const runId = deps.manager.start({
       providerId,
       modelId,
       apiKey,
+      reasoningEnabled,
       clientSession,
       seedDate: new Date().toISOString().slice(0, 10),
       ...(budgetUsd === undefined ? {} : { budgetUsd }),
+      ...(mockCostUsd === undefined || !canUseMockCost ? {} : { mockCostUsd }),
     });
 
     return context.json({ runId }, 200);

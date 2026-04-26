@@ -40,6 +40,58 @@
   line-height: 1.08;
 }
 
+.title span {
+  display: block;
+}
+
+.modelTitle {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: clamp(1.05rem, 4vw, 1.35rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.reasoningLine {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.timerRow {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timerPill {
+  min-width: 112px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 118, 110, 0.08);
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  color: var(--ink);
+}
+
+.timerLabel {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timerPill strong {
+  display: block;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+}
+
 .abortButton,
 .retryButton {
   min-height: 44px;
@@ -59,6 +111,7 @@
   color: white;
   background: linear-gradient(135deg, #b91c1c, #c2410c);
   box-shadow: 0 14px 28px rgba(185, 28, 28, 0.22);
+  margin-left: auto;
 
   &:hover {
     transform: translateY(-1px);
@@ -121,6 +174,13 @@
   gap: 12px;
 }
 
+.resourceGrid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .hudCard {
   padding: 14px;
   border-radius: 18px;
@@ -145,6 +205,15 @@
   font-size: 1.25rem;
 }
 
+.resourceValue {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 .metaGrid {
   margin: 24px 0 0;
   display: grid;
@@ -164,6 +233,20 @@
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.6;
+}
+
+.primaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 18px;
+  padding: 0 16px;
+  border-radius: 12px;
+  color: white;
+  background: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .errorBlock {
@@ -187,5 +270,6 @@
   .abortButton,
   .retryButton {
     width: 100%;
+    margin-left: 0;
   }
 }

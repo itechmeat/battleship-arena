@@ -8,7 +8,7 @@ TBD - created by archiving change s2a-game-loop-mock. Update Purpose after archi
 
 ### Requirement: Provider adapter interface
 
-The backend SHALL expose a `ProviderAdapter` interface under `backend/src/providers/types.ts` with three fields (`id`, `models`, `call`). The `id` field is the provider's short slug. The `models` field is a readonly array of `ProviderModel` entries, each with `id`, `displayName`, and `hasReasoning`. The `call(input, signal)` method accepts a `ProviderCallInput` (`modelId`, `apiKey`, `boardPng`, `shipsRemaining`, `systemPrompt`, `priorShots`, `seedDate`) plus an `AbortSignal`, and returns a promise of `ProviderCallOutput` (`rawText`, `tokensIn`, `tokensOut`, `reasoningTokens`, `costUsdMicros`, `durationMs`). The adapter MUST honor the `AbortSignal` by aborting any in-flight work and rejecting with an `AbortError`. The adapter MUST NOT log, persist, or echo `apiKey` in any returned value. The interface extends `docs/spec.md` 6.1 by one field (`seedDate`), which is public information; real provider adapters ignore it.
+The backend SHALL expose a `ProviderAdapter` interface under `backend/src/providers/types.ts` with three fields (`id`, `models`, `call`). The `id` field is the provider's short slug. The `models` field is a readonly array of `ProviderModel` entries, each with `id`, `displayName`, and `hasReasoning`. The `call(input, signal)` method accepts a `ProviderCallInput` (`modelId`, `apiKey`, `boardText`, optional `boardPng`, `shipsRemaining`, `systemPrompt`, `priorShots`, optional `consecutiveSchemaErrors`, `seedDate`) plus an `AbortSignal`, and returns a promise of `ProviderCallOutput` (`rawText`, `tokensIn`, `tokensOut`, `reasoningTokens`, `costUsdMicros`, `durationMs`). The adapter MUST honor the `AbortSignal` by aborting any in-flight work and rejecting with an `AbortError`. The adapter MUST NOT log, persist, or echo `apiKey` in any returned value.
 
 #### Scenario: Interface shape is stable across adapters
 
@@ -36,7 +36,7 @@ The backend SHALL expose a `createProviderRegistry(adapters)` factory that accep
 
 ### Requirement: Mock provider adapter with three model variants
 
-The backend SHALL expose a `createMockProvider({ delayMs? }): ProviderAdapter` factory whose returned adapter has `id = "mock"` and exactly three models: `mock-happy`, `mock-misses`, `mock-schema-errors`. The adapter MUST be stateless: every call reconstructs per-run state from `priorShots` + `seedDate` alone. The adapter MUST await `delayMs` (default `MOCK_TURN_DELAY_MS_DEFAULT = 150`) before returning, and MUST abort the sleep promptly when the `AbortSignal` fires. On every call, the adapter MUST return `tokensIn = 0`, `tokensOut = 0`, `reasoningTokens = null`, `costUsdMicros = 0`, and `durationMs` equal to the measured wall-clock of its own work. This adapter is a dev/test-only fixture for the S2 benchmark surface: it MUST remain excluded from production-facing provider lists, docs, and default non-dev bootstrap paths, and SHOULD be removed or explicitly gated once real providers ship in S3.
+The backend SHALL expose a `createMockProvider({ delayMs? }): ProviderAdapter` factory whose returned adapter has `id = "mock"` and exactly three models: `mock-happy`, `mock-misses`, `mock-schema-errors`. The adapter MUST be stateless: every call reconstructs per-run state from `priorShots` + `seedDate` alone via `generateBoard(seedDate)`. `ProviderCallInput.boardText` is a human-readable canonical board snapshot for optional verification only; the mock adapter MUST NOT use it as core game state, but MAY reject with a descriptive error if it is present and inconsistent with reconstructed state. `ProviderCallInput.consecutiveSchemaErrors` is an informational counter used by `mock-schema-errors` to escalate simulated schema-failure behavior and MUST be ignored by other mock variants. The adapter MUST await `delayMs` (default `MOCK_TURN_DELAY_MS_DEFAULT = 150`) before returning, and MUST abort the sleep promptly when the `AbortSignal` fires. On every call, the adapter MUST return `tokensIn = 0`, `tokensOut = 0`, `reasoningTokens = null`, `costUsdMicros = 0`, and `durationMs` equal to the measured wall-clock of its own work. This adapter is a dev/test-only fixture for the S2 benchmark surface: it MUST remain excluded from production-facing provider lists, docs, and default non-dev bootstrap paths, and SHOULD be removed or explicitly gated once real providers ship in S3.
 
 #### Scenario: Three model ids are exposed
 
@@ -114,3 +114,32 @@ The `mock-schema-errors` variant MUST return a `rawText` that causes the shared 
 
 - **WHEN** a test drives `mock-schema-errors` through the game loop
 - **THEN** the persisted outcome equals `dnf_schema_errors` and exactly 5 `run_shots` rows with `result = "schema_error"` are present
+
+### Requirement: Mock adapter accepts a test-only testHooks options bag
+
+The `createMockProvider` factory SHALL accept an optional `testHooks` field on its options argument with the shape `{ costUsdMicros?: number; tokensIn?: number; tokensOut?: number; reasoningTokens?: number | null; failure?: "transient" | "unreachable" | null }`. When `testHooks` is absent or `undefined`, the adapter MUST behave exactly as it did in S2: every call returns `tokensIn = 0`, `tokensOut = 0`, `reasoningTokens = null`, `costUsdMicros = 0`, and the adapter MUST NOT throw a `ProviderError`. When `testHooks.costUsdMicros` is supplied, the adapter MUST report that exact integer value as `costUsdMicros` on every successful call. When `testHooks.tokensIn`, `testHooks.tokensOut`, or `testHooks.reasoningTokens` are supplied, the adapter MUST report those exact values on every successful call. When `testHooks.failure === "transient"`, the adapter MUST throw `ProviderError { kind: "transient", cause: <string> }` instead of returning a result, on every call for the lifetime of the adapter instance. When `testHooks.failure === "unreachable"`, the adapter MUST throw `ProviderError { kind: "unreachable", cause: <string>, status: <number> }` instead of returning a result, on every call. The production backend bootstrap path MUST NOT pass `testHooks`; `testHooks` is reserved for integration tests and the staging-only mock-cost knob documented in the runs API.
+
+#### Scenario: Cost override is reported verbatim
+
+- **WHEN** `createMockProvider({ testHooks: { costUsdMicros: 4_000 } }).call(...)` resolves
+- **THEN** the returned `ProviderCallOutput` has `costUsdMicros === 4_000`
+
+#### Scenario: Token override is reported verbatim
+
+- **WHEN** `createMockProvider({ testHooks: { tokensIn: 120, tokensOut: 8, reasoningTokens: 50 } }).call(...)` resolves
+- **THEN** the returned `ProviderCallOutput` has `tokensIn === 120`, `tokensOut === 8`, and `reasoningTokens === 50`
+
+#### Scenario: Transient failure throws ProviderError of kind transient
+
+- **WHEN** `createMockProvider({ testHooks: { failure: "transient" } }).call(...)` is invoked
+- **THEN** the returned promise rejects with a value that satisfies `err.kind === "transient"` and carries a non-empty `cause` string
+
+#### Scenario: Unreachable failure throws ProviderError of kind unreachable
+
+- **WHEN** `createMockProvider({ testHooks: { failure: "unreachable" } }).call(...)` is invoked
+- **THEN** the returned promise rejects with a value that satisfies `err.kind === "unreachable"`, carries a non-empty `cause` string, and carries a numeric `status`
+
+#### Scenario: Absent testHooks preserves S2 defaults
+
+- **WHEN** `createMockProvider({}).call(...)` resolves for any model variant
+- **THEN** the returned `ProviderCallOutput` has `tokensIn === 0`, `tokensOut === 0`, `reasoningTokens === null`, `costUsdMicros === 0`, and no `ProviderError` is thrown

@@ -24,6 +24,7 @@ describe("S2a shared types", () => {
       providerId: "mock",
       modelId: "mock-happy",
       displayName: "Mock happy",
+      reasoningEnabled: false,
       startedAt: 0,
       endedAt: null,
       outcome: null,
@@ -46,6 +47,7 @@ describe("S2a shared types", () => {
       result: "miss",
       rawResponse: "{}",
       reasoningText: null,
+      llmError: null,
       tokensIn: 0,
       tokensOut: 0,
       reasoningTokens: null,
@@ -63,6 +65,7 @@ describe("S2a shared types", () => {
       providerId: "mock",
       modelId: "mock-happy",
       apiKey: "k",
+      reasoningEnabled: false,
       clientSession: "session-1",
       seedDate: "2026-04-21",
     };

@@ -4,6 +4,7 @@ import type { SseEvent } from "@battleship-arena/shared";
 
 import { createQueries } from "../../src/db/queries.ts";
 import { withTempDatabase } from "../../src/db/with-temp-database.ts";
+import { ProviderError } from "../../src/providers/errors.ts";
 import { createMockProvider } from "../../src/providers/mock.ts";
 import { runEngine } from "../../src/runs/engine.ts";
 
@@ -12,6 +13,7 @@ function baseInput(modelId: string, apiKey = "test-key") {
     providerId: "mock",
     modelId,
     apiKey,
+    reasoningEnabled: false,
     clientSession: "session-1",
     seedDate: "2026-04-21",
   };
@@ -101,7 +103,7 @@ describe("runEngine", () => {
 
       expect(outcome).toBe("dnf_schema_errors");
       expect(meta.outcome).toBe("dnf_schema_errors");
-      expect(meta.shotsFired).toBe(0);
+      expect(meta.shotsFired).toBe(5);
       expect(meta.schemaErrors).toBe(5);
       expect(shots).toHaveLength(5);
       expect(shots.every((shot) => shot.result === "schema_error")).toBe(true);
@@ -153,6 +155,195 @@ describe("runEngine", () => {
         JSON.stringify(sqlite.query("SELECT * FROM run_shots").all());
 
       expect(dump).not.toContain(sentinel);
+    });
+  });
+
+  test("budgetUsd uses floor micros and finalizes dnf_budget after exceeding the cap", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({ delayMs: 0, costUsdMicros: 501 });
+
+      const outcome = await runEngine(
+        "run-1",
+        {
+          ...baseInput("mock-misses"),
+          budgetUsd: 0.0005,
+        },
+        new AbortController().signal,
+        () => {},
+        { queries, provider },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+
+      expect(outcome).toBe("dnf_budget");
+      expect(meta?.budgetUsdMicros).toBe(500);
+      expect(meta?.costUsdMicros).toBe(501);
+    });
+  });
+
+  test("terminal cost is the sum of every provider turn", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({ delayMs: 0, costUsdMicros: 7 });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+      const shots = queries.listShots("run-1");
+
+      expect(outcome).toBe("won");
+      expect(meta?.costUsdMicros).toBe(shots.length * 7);
+    });
+  });
+
+  test("transient ProviderError persists llm_error, increments schema errors, and continues", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      let calls = 0;
+      const provider = createMockProvider({
+        delayMs: 0,
+        testHooks: {
+          async beforeCall() {
+            calls += 1;
+            if (calls > 1) {
+              return;
+            }
+
+            throw new ProviderError({
+              kind: "transient",
+              code: "provider_5xx",
+              providerId: "mock",
+              message: "Provider service failed",
+              status: 503,
+              cause: "upstream failed with sk-secret",
+            });
+          },
+        },
+      });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy", "sk-secret"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider },
+      );
+
+      const shots = queries.listShots("run-1");
+      const meta = queries.getRunMeta("run-1");
+
+      expect(outcome).toBe("won");
+      expect(meta?.schemaErrors).toBe(1);
+      expect(shots[0]).toMatchObject({
+        row: null,
+        col: null,
+        result: "schema_error",
+        rawResponse: "",
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsdMicros: 0,
+      });
+      expect(shots[0]?.llmError).toBe("upstream failed with [redacted]");
+      expect(shots[0]?.llmError).not.toContain("sk-secret");
+    });
+  }, 30_000);
+
+  test("provider turn timeout records a timeout and continues", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({ delayMs: 50 });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider, turnTimeoutMs: 1 },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+      const shots = queries.listShots("run-1");
+
+      expect(outcome).toBe("dnf_schema_errors");
+      expect(meta?.schemaErrors).toBe(5);
+      expect(meta?.shotsFired).toBe(5);
+      expect(shots).toHaveLength(5);
+      expect(shots.every((shot) => shot.result === "timeout")).toBe(true);
+      expect(shots.every((shot) => shot.llmError?.includes("timed out"))).toBe(true);
+    });
+  });
+
+  test("five consecutive transient ProviderErrors reach dnf_schema_errors", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({
+        delayMs: 0,
+        failure: new ProviderError({
+          kind: "transient",
+          code: "provider_5xx",
+          providerId: "mock",
+          message: "Provider service failed",
+          status: 503,
+          cause: "503 upstream",
+        }),
+      });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+      const shots = queries.listShots("run-1");
+
+      expect(outcome).toBe("dnf_schema_errors");
+      expect(meta?.schemaErrors).toBe(5);
+      expect(meta?.shotsFired).toBe(5);
+      expect(shots).toHaveLength(5);
+      expect(shots.every((shot) => shot.result === "schema_error")).toBe(true);
+      expect(shots.every((shot) => shot.llmError?.includes("503 upstream"))).toBe(true);
+    });
+  });
+
+  test("unreachable ProviderError finalizes llm_unreachable without a shot row", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({
+        delayMs: 0,
+        failure: new ProviderError({
+          kind: "unreachable",
+          code: "auth",
+          providerId: "mock",
+          message: "Provider authentication failed",
+          status: 401,
+          cause: "401 unauthorized",
+        }),
+      });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+
+      expect(outcome).toBe("llm_unreachable");
+      expect(meta?.schemaErrors).toBe(0);
+      expect(meta?.shotsFired).toBe(0);
+      expect(queries.listShots("run-1")).toEqual([]);
     });
   });
 });

@@ -4,7 +4,7 @@
 
 Public LLM benchmarks tend to measure the wrong things for the wrong reasons. They ask one-shot trivia, grade on exact-match against a static answer key, and quietly drift out of date as the test questions seep into the next round of training data. Most of them also hide the interesting part: how a model actually behaves over many turns, with imperfect information, a visual input, and a strict output contract it has to keep honoring or lose the game.
 
-Battleship is a small, legible, adversarial game that exposes exactly those behaviors. A player cannot see the opponent's board, has to reason about where ships can and cannot be, has to update that reasoning after every shot, and has to return each move in a rigid machine-checkable format or the game stops. That makes it a surprisingly sharp probe for a modern LLM: spatial reasoning from an image, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all at once.
+Battleship is a small, legible, adversarial game that exposes exactly those behaviors. A player cannot see the opponent's board, has to reason about where ships can and cannot be, has to update that reasoning after every shot, and has to return each move in a rigid machine-checkable format or the game stops. That makes it a surprisingly sharp probe for a modern LLM: spatial reasoning from a compact board state, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all at once.
 
 The gap this project fills is a public, reproducible, low-friction way to watch any LLM play that game under identical conditions, and to compare the results honestly over time.
 
@@ -29,7 +29,7 @@ The live game is streamed shot-by-shot to whoever is watching, but the run itsel
 
 1. A visitor opens the app on a phone (primarily) or any browser.
 2. They choose a provider and an exact model offered by that provider, and paste their API key into the session.
-3. They press start. The backend begins a run against the current day's board: it shows the model the current state of the board as an image, asks for the next shot in a machine-readable shape, applies the shot, and loops until the fleet is sunk, the game's termination conditions fire, or the user cancels.
+3. They press start. The backend begins a run against the current day's board: it shows the model the current state of the board as a compact text board with rule-filtered candidate cells, asks for the next shot in a machine-readable shape, applies the shot, and loops until the fleet is sunk, the game's termination conditions fire, or the user cancels.
 4. While the run is live, the viewer sees each shot land in near-real-time, with running counters for shots fired, hits, misses, duration, tokens used, and estimated spend.
 5. When the run ends, it is saved as a replay with its final outcome tag and metrics. The viewer can share a link to that replay, look at how other models have played the same day's board, or try another (provider, model) pair.
 6. Returning visitors on another day see the leaderboard, can open any past run as a replay, and can play today's board themselves with any supported model.

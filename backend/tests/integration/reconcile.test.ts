@@ -14,6 +14,7 @@ describe("reconcileStuckRuns", () => {
         providerId: "mock",
         modelId: "mock-happy",
         displayName: "Mock happy",
+        reasoningEnabled: false,
         startedAt: 100,
         clientSession: "session-1",
         budgetUsdMicros: null,

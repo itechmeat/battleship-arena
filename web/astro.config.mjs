@@ -1,6 +1,8 @@
 import { defineConfig } from "astro/config";
 import solidJs from "@astrojs/solid-js";
 
+const backendPort = process.env.BACKEND_PORT?.trim() || "8081";
+
 function localRunShellRewrite() {
   return {
     name: "local-run-shell-rewrite",
@@ -21,6 +23,14 @@ function localRunShellRewrite() {
           req.url = search.length > 0 ? `/runs/__dynamic__?${search}` : "/runs/__dynamic__";
         }
 
+        if (
+          /^\/runs\/[^/]+\/replay\/?$/.test(pathname) &&
+          !/^\/runs\/__dynamic__\/replay\/?$/.test(pathname)
+        ) {
+          req.url =
+            search.length > 0 ? `/runs/__dynamic__/replay?${search}` : "/runs/__dynamic__/replay";
+        }
+
         next();
       });
     },
@@ -36,7 +46,7 @@ export default defineConfig({
     server: {
       proxy: {
         "/api": {
-          target: "http://127.0.0.1:8081",
+          target: `http://127.0.0.1:${backendPort}`,
         },
       },
     },

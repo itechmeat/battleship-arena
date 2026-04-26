@@ -13,6 +13,7 @@ function shot(overrides: Partial<RunShotRow>): RunShotRow {
     result: "miss",
     rawResponse: "{}",
     reasoningText: null,
+    llmError: null,
     tokensIn: 0,
     tokensOut: 0,
     reasoningTokens: null,
