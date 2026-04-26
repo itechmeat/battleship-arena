@@ -54,6 +54,7 @@ describe("S3 shared provider contracts", () => {
               id: "openai/gpt-5-nano",
               displayName: "OpenAI: GPT-5 Nano",
               hasReasoning: true,
+              reasoningMode: "optional",
               pricing: {
                 inputUsdPerMtok: 0.05,
                 outputUsdPerMtok: 0.4,
@@ -91,6 +92,7 @@ describe("S3 shared provider contracts", () => {
           providerId: "openrouter",
           modelId: "openai/gpt-5-nano",
           displayName: "OpenAI: GPT-5 Nano",
+          reasoningEnabled: true,
           runsCount: 2,
           shotsToWin: 17,
           bestRunId: "run-1",

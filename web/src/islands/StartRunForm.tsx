@@ -1,7 +1,8 @@
-import type { ProvidersResponseProvider } from "@battleship-arena/shared";
-import { createMemo, createSignal, onMount, Show } from "solid-js";
+import type { ProvidersResponseModel, ProvidersResponseProvider } from "@battleship-arena/shared";
+import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js";
 
 import { ApiError, getProviders, startRun } from "../lib/api.ts";
+import { formatUsd } from "../lib/format.ts";
 import styles from "./StartRunForm.module.css";
 
 const MOCK_MODEL_METADATA = {
@@ -25,22 +26,27 @@ const MOCK_PROVIDER: ProvidersResponseProvider = {
       id: "mock-happy",
       displayName: "Mock - winning run",
       hasReasoning: false,
+      reasoningMode: "forced_off",
       ...MOCK_MODEL_METADATA,
     },
     {
       id: "mock-misses",
       displayName: "Mock - always misses",
       hasReasoning: false,
+      reasoningMode: "forced_off",
       ...MOCK_MODEL_METADATA,
     },
     {
       id: "mock-schema-errors",
       displayName: "Mock - schema errors",
       hasReasoning: false,
+      reasoningMode: "forced_off",
       ...MOCK_MODEL_METADATA,
     },
   ],
 };
+
+export const API_KEY_STORAGE_PREFIX = "battleship-arena:provider-key:";
 
 const MOCK_ENABLED_MODES = new Set(["development", "staging", "test"]);
 
@@ -50,6 +56,114 @@ export function shouldInjectMockProvider(mode: string): boolean {
 
 const SHOULD_INJECT_MOCK = shouldInjectMockProvider(import.meta.env.MODE);
 
+function formatUsdRange(minUsd: number, maxUsd: number): string {
+  const minLabel = formatUsd(minUsd);
+  const maxLabel = formatUsd(maxUsd);
+  return minLabel === maxLabel ? minLabel : `${minLabel}-${maxLabel}`;
+}
+
+export function syncCatalogSelection(
+  nextProviders: readonly ProvidersResponseProvider[],
+  currentProviderId: string,
+  currentModelId: string,
+): { providerId: string; modelId: string } {
+  const firstProvider = nextProviders[0];
+  if (firstProvider === undefined) {
+    return { providerId: currentProviderId, modelId: currentModelId };
+  }
+
+  const nextProvider =
+    currentProviderId === MOCK_PROVIDER.id && firstProvider.id !== MOCK_PROVIDER.id
+      ? firstProvider
+      : (nextProviders.find((provider) => provider.id === currentProviderId) ?? firstProvider);
+  const nextModel =
+    nextProvider.models.find((model) => model.id === currentModelId) ?? nextProvider.models[0];
+
+  return {
+    providerId: nextProvider.id,
+    modelId: nextModel?.id ?? "",
+  };
+}
+
+export function apiKeyStorageKey(providerId: string): string {
+  return `${API_KEY_STORAGE_PREFIX}${providerId}`;
+}
+
+export function readStoredApiKey(providerId: string): string {
+  if (providerId.length === 0) {
+    return "";
+  }
+
+  try {
+    return window.localStorage.getItem(apiKeyStorageKey(providerId)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function writeStoredApiKey(providerId: string, nextApiKey: string): void {
+  if (providerId.length === 0) {
+    return;
+  }
+
+  try {
+    if (nextApiKey.length === 0) {
+      window.localStorage.removeItem(apiKeyStorageKey(providerId));
+      return;
+    }
+
+    window.localStorage.setItem(apiKeyStorageKey(providerId), nextApiKey);
+  } catch {
+    // Browser storage can be disabled; the form still works for the current run.
+  }
+}
+
+export function defaultReasoningEnabled(model: ProvidersResponseModel | null): boolean {
+  return model?.reasoningMode === "forced_on" || model?.reasoningMode === "optional";
+}
+
+export function resolveReasoningEnabled(
+  model: ProvidersResponseModel | null,
+  requested: boolean,
+): boolean {
+  if (model?.reasoningMode === "forced_on") {
+    return true;
+  }
+
+  if (model?.reasoningMode === "forced_off") {
+    return false;
+  }
+
+  return requested;
+}
+
+export function reasoningControlText(
+  model: ProvidersResponseModel | null,
+  enabled: boolean,
+): string {
+  if (model?.reasoningMode === "forced_on") {
+    return "Reasoning required";
+  }
+
+  if (model?.reasoningMode === "forced_off") {
+    return "Reasoning unavailable";
+  }
+
+  return enabled ? "Reasoning enabled" : "Reasoning disabled";
+}
+
+function reasoningHelperText(model: ProvidersResponseModel): string {
+  if (model.reasoningMode === "forced_on") {
+    return "This model always uses reasoning.";
+  }
+
+  if (model.reasoningMode === "forced_off") {
+    return "This model does not support reasoning controls.";
+  }
+
+  return "Toggle reasoning for this optional model.";
+}
+
 export function StartRunForm() {
   const [providers, setProviders] = createSignal<readonly ProvidersResponseProvider[]>(
     SHOULD_INJECT_MOCK ? [MOCK_PROVIDER] : [],
@@ -57,6 +171,7 @@ export function StartRunForm() {
   const [providerId, setProviderId] = createSignal(SHOULD_INJECT_MOCK ? "mock" : "");
   const [modelId, setModelId] = createSignal(SHOULD_INJECT_MOCK ? "mock-happy" : "");
   const [apiKey, setApiKey] = createSignal("");
+  const [reasoningEnabled, setReasoningEnabled] = createSignal(false);
   const [budgetUsd, setBudgetUsd] = createSignal("");
   const [mockCost, setMockCost] = createSignal<number | undefined>(undefined);
   const [busy, setBusy] = createSignal(false);
@@ -80,7 +195,24 @@ export function StartRunForm() {
       return `Start ${selectedProvider()?.displayName ?? "run"}`;
     }
 
-    return `Start ${selectedProvider()?.displayName ?? "run"} · $${model.estimatedCostRange.minUsd.toFixed(6)}-${model.estimatedCostRange.maxUsd.toFixed(6)}${model.hasReasoning ? " · Reasoning models may cost more" : ""}`;
+    return `Start ${selectedProvider()?.displayName ?? "run"} · ${formatUsdRange(
+      model.estimatedCostRange.minUsd,
+      model.estimatedCostRange.maxUsd,
+    )}${model.hasReasoning ? " · Reasoning models may cost more" : ""}`;
+  });
+  const effectiveReasoningEnabled = createMemo(() =>
+    resolveReasoningEnabled(selectedModel(), reasoningEnabled()),
+  );
+  const reasoningDescriptionId = "reasoning-mode-helper";
+
+  createEffect((previousSelectionKey: string | undefined) => {
+    const model = selectedModel();
+    const selectionKey = `${providerId()}:${model?.id ?? ""}:${model?.reasoningMode ?? ""}`;
+    if (selectionKey !== previousSelectionKey) {
+      setReasoningEnabled(defaultReasoningEnabled(model));
+    }
+
+    return selectionKey;
   });
 
   onMount(() => {
@@ -99,16 +231,12 @@ export function StartRunForm() {
         const nextProviders = SHOULD_INJECT_MOCK
           ? [...catalog.providers, MOCK_PROVIDER]
           : catalog.providers;
-        const firstProvider = nextProviders[0];
-        const firstModel = firstProvider?.models[0];
+        const nextSelection = syncCatalogSelection(nextProviders, providerId(), modelId());
 
         setProviders(nextProviders);
-        if (firstProvider !== undefined && providerId().length === 0) {
-          setProviderId(firstProvider.id);
-        }
-        if (firstModel !== undefined && modelId().length === 0) {
-          setModelId(firstModel.id);
-        }
+        setProviderId(nextSelection.providerId);
+        setModelId(nextSelection.modelId);
+        setApiKey(readStoredApiKey(nextSelection.providerId));
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Could not load providers.");
       } finally {
@@ -143,10 +271,12 @@ export function StartRunForm() {
       }
 
       const selectedMockCost = mockCost();
+      writeStoredApiKey(providerId(), apiKey());
       const response = await startRun({
         providerId: providerId(),
         modelId: modelId(),
         apiKey: apiKey(),
+        reasoningEnabled: effectiveReasoningEnabled(),
         ...(parsedBudget === undefined || parsedBudget === 0 ? {} : { budgetUsd: parsedBudget }),
         ...(selectedMockCost === undefined || providerId() !== "mock"
           ? {}
@@ -187,7 +317,9 @@ export function StartRunForm() {
                   (provider) => provider.id === event.currentTarget.value,
                 );
                 setProviderId(event.currentTarget.value);
-                setModelId(nextProvider?.models[0]?.id ?? "");
+                const nextModelId = nextProvider?.models[0]?.id ?? "";
+                setModelId(nextModelId);
+                setApiKey(readStoredApiKey(event.currentTarget.value));
               }}
               disabled={busy() || loadingCatalog()}
             >
@@ -202,7 +334,9 @@ export function StartRunForm() {
             <select
               class={styles.select}
               value={modelId()}
-              onInput={(event) => setModelId(event.currentTarget.value)}
+              onInput={(event) => {
+                setModelId(event.currentTarget.value);
+              }}
               disabled={busy() || loadingCatalog()}
             >
               {modelOptions().map((option) => (
@@ -212,13 +346,37 @@ export function StartRunForm() {
             <Show when={selectedModel()}>
               {(model) => (
                 <span class={styles.helper}>
-                  Estimated game cost: ${model().estimatedCostRange.minUsd.toFixed(6)}-
-                  {model().estimatedCostRange.maxUsd.toFixed(6)}
-                  {model().hasReasoning ? ". Reasoning models may cost more." : ""}
+                  Estimated game cost:{" "}
+                  {formatUsdRange(
+                    model().estimatedCostRange.minUsd,
+                    model().estimatedCostRange.maxUsd,
+                  )}
+                  {model().hasReasoning ? ". Reasoning-capable models may cost more." : ""}
                 </span>
               )}
             </Show>
           </label>
+
+          <Show when={selectedModel()}>
+            {(model) => (
+              <div class={styles.checkboxGroup}>
+                <label class={styles.checkboxField}>
+                  <input
+                    type="checkbox"
+                    checked={effectiveReasoningEnabled()}
+                    disabled={busy() || model().reasoningMode !== "optional"}
+                    aria-describedby={reasoningDescriptionId}
+                    title={reasoningHelperText(model())}
+                    onInput={(event) => setReasoningEnabled(event.currentTarget.checked)}
+                  />
+                  <span>{reasoningControlText(model(), effectiveReasoningEnabled())}</span>
+                </label>
+                <span id={reasoningDescriptionId} class={styles.helper}>
+                  {reasoningHelperText(model())}
+                </span>
+              </div>
+            )}
+          </Show>
 
           <label class={styles.field}>
             <span class={styles.label}>API key</span>
@@ -230,9 +388,12 @@ export function StartRunForm() {
               placeholder="Paste your provider key"
               value={apiKey()}
               onInput={(event) => setApiKey(event.currentTarget.value)}
+              onChange={(event) => writeStoredApiKey(providerId(), event.currentTarget.value)}
               disabled={busy()}
             />
-            <span class={styles.helper}>Keys stay in-memory for the duration of one run only.</span>
+            <span class={styles.helper}>
+              Stored locally for this provider and sent only when starting a run.
+            </span>
           </label>
 
           <label class={styles.field}>

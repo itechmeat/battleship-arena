@@ -8,25 +8,55 @@ import {
   getPricingEntry,
   listPricedModels,
   listProviderPricing,
+  reasoningModeForEntry,
   type PricingEntry,
 } from "../../src/pricing/catalog.ts";
 
 describe("pricing catalog", () => {
-  test("lists at least five OpenRouter and five OpenCode Go models", () => {
+  test("lists real provider model catalogs", () => {
     expect(listProviderPricing("openrouter").length).toBeGreaterThanOrEqual(5);
     expect(listProviderPricing("opencode-go").length).toBeGreaterThanOrEqual(5);
+    expect(listProviderPricing("zai").length).toBeGreaterThanOrEqual(5);
   });
 
   test("uses provider/model keys and reviewed source metadata", () => {
     const entry = getPricingEntry("openrouter", "openai/gpt-5-nano");
+    const kimiEntry = getPricingEntry("openrouter", "moonshotai/kimi-k2.6");
 
     expect(entry?.providerId).toBe("openrouter");
     expect(entry?.modelId).toBe("openai/gpt-5-nano");
     expect(entry?.priceSource).toContain("openrouter.ai");
     expect(entry?.lastReviewedAt).toBe("2026-04-24");
+    expect(kimiEntry).toMatchObject({
+      providerId: "openrouter",
+      modelId: "moonshotai/kimi-k2.6",
+      hasReasoning: true,
+      lastReviewedAt: "2026-04-24",
+    });
+    expect(kimiEntry === undefined ? null : reasoningModeForEntry(kimiEntry)).toBe("optional");
     expect(listPricedModels().every((row) => row.lastReviewedAt.match(/^\d{4}-\d{2}-\d{2}$/))).toBe(
       true,
     );
+  });
+
+  test("prices direct Z.AI GLM models from the official pricing table", () => {
+    const entry = getPricingEntry("zai", "zai/glm-5.1");
+
+    expect(entry).toEqual(
+      expect.objectContaining({
+        providerId: "zai",
+        providerDisplayName: "Z.AI",
+        modelId: "zai/glm-5.1",
+        providerModelId: "glm-5.1",
+        displayName: "GLM-5.1",
+        hasReasoning: true,
+        inputMicrosPerMtok: 1_400_000,
+        outputMicrosPerMtok: 4_400_000,
+        priceSource: "https://docs.z.ai/guides/overview/pricing",
+        lastReviewedAt: "2026-04-26",
+      }),
+    );
+    expect(entry === undefined ? null : reasoningModeForEntry(entry)).toBe("forced_on");
   });
 
   test("converts per-million-token prices to integer USD micros", () => {

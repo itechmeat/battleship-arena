@@ -1,13 +1,17 @@
 import type { Outcome, RunMeta, RunShotRow } from "@battleship-arena/shared";
-import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 
 import { abortRun, ApiError, getRun, getRunShots } from "../lib/api.ts";
+import { formatUsdMicros } from "../lib/format.ts";
 import { subscribeToRun } from "../lib/sse.ts";
+import { deriveMetrics, formatDurationMs } from "./liveGameMetrics.ts";
 import styles from "./LiveGame.module.css";
 
 import BoardView from "./BoardView.tsx";
 
-type Phase = "loading" | "live" | "terminal" | "error";
+type Phase = "loading" | "live" | "terminal" | "error" | "notFound";
+
+const integerFormatter = new Intl.NumberFormat("en-US");
 
 interface LiveGameProps {
   runId: string;
@@ -37,13 +41,8 @@ function resolveErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function deriveMetrics(shots: readonly RunShotRow[]) {
-  return {
-    shotsFired: shots.filter((shot) => shot.result !== "schema_error").length,
-    hits: shots.filter((shot) => shot.result === "hit" || shot.result === "sunk").length,
-    schemaErrors: shots.filter((shot) => shot.result === "schema_error").length,
-    invalidCoordinates: shots.filter((shot) => shot.result === "invalid_coordinate").length,
-  };
+function isRunNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
 }
 
 function mergeOutcome(
@@ -73,9 +72,11 @@ export function LiveGame(props: LiveGameProps) {
   const [phase, setPhase] = createSignal<Phase>("loading");
   const [meta, setMeta] = createSignal<RunMeta | null>(null);
   const [shots, setShots] = createSignal<RunShotRow[]>([]);
+  const [nowMs, setNowMs] = createSignal(Date.now());
   const [error, setError] = createSignal<string | null>(null);
   let unsubscribe: (() => void) | undefined;
   let loadController: AbortController | undefined;
+  let clockInterval: ReturnType<typeof setInterval> | undefined;
 
   const cancelLoad = () => {
     loadController?.abort();
@@ -83,18 +84,47 @@ export function LiveGame(props: LiveGameProps) {
   };
 
   const metrics = createMemo(() => {
-    const currentMeta = meta();
-    if (currentMeta !== null && currentMeta.outcome !== null) {
-      return {
-        shotsFired: currentMeta.shotsFired,
-        hits: currentMeta.hits,
-        schemaErrors: currentMeta.schemaErrors,
-        invalidCoordinates: currentMeta.invalidCoordinates,
-      };
-    }
-
     return deriveMetrics(shots());
   });
+
+  const elapsedMs = createMemo(() => {
+    const currentMeta = meta();
+    if (currentMeta === null) {
+      return 0;
+    }
+
+    const endMs = currentMeta.endedAt ?? nowMs();
+    return Math.max(0, endMs - currentMeta.startedAt);
+  });
+
+  const lastShotElapsedMs = createMemo(() => {
+    const currentMeta = meta();
+    if (currentMeta === null || phase() === "terminal") {
+      return null;
+    }
+
+    const lastShot = shots().at(-1);
+    return Math.max(0, nowMs() - (lastShot?.createdAt ?? currentMeta.startedAt));
+  });
+  const modelTitle = createMemo(() => {
+    const currentMeta = meta();
+    return currentMeta?.displayName ?? "Loading run";
+  });
+  const pageStateLabel = createMemo(() => {
+    switch (phase()) {
+      case "live":
+        return "In progress";
+      case "terminal":
+        return "Finished";
+      case "error":
+        return "Interrupted";
+      case "notFound":
+        return "Run not found";
+      case "loading":
+        return "Loading";
+    }
+  });
+  const reasoningStatus = createMemo(() => (meta()?.reasoningEnabled ? "On" : "Off"));
 
   const load = async () => {
     unsubscribe?.();
@@ -141,12 +171,12 @@ export function LiveGame(props: LiveGameProps) {
                   rawResponse: "",
                   reasoningText: event.reasoning,
                   llmError: null,
-                  tokensIn: 0,
-                  tokensOut: 0,
-                  reasoningTokens: null,
-                  costUsdMicros: 0,
-                  durationMs: 0,
-                  createdAt: Date.now(),
+                  tokensIn: event.tokensIn ?? 0,
+                  tokensOut: event.tokensOut ?? 0,
+                  reasoningTokens: event.reasoningTokens ?? null,
+                  costUsdMicros: event.costUsdMicros ?? 0,
+                  durationMs: event.durationMs ?? 0,
+                  createdAt: event.createdAt ?? Date.now(),
                 }),
               );
               return;
@@ -178,6 +208,12 @@ export function LiveGame(props: LiveGameProps) {
         return;
       }
 
+      if (isRunNotFound(caughtError)) {
+        setError(null);
+        setPhase("notFound");
+        return;
+      }
+
       setError(resolveErrorMessage(caughtError, "Could not load the run."));
       setPhase("error");
     }
@@ -187,14 +223,7 @@ export function LiveGame(props: LiveGameProps) {
     try {
       const response = await abortRun(runId());
       if (response.outcome !== null) {
-        setMeta((previous) =>
-          previous === null
-            ? previous
-            : {
-                ...previous,
-                outcome: response.outcome,
-              },
-        );
+        setMeta(await getRun(runId()));
         setPhase("terminal");
       }
     } catch (caughtError) {
@@ -210,6 +239,10 @@ export function LiveGame(props: LiveGameProps) {
   };
 
   onMount(() => {
+    clockInterval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
     if (props.runId === "__dynamic__") {
       const resolvedRunId = window.location.pathname.split("/").filter(Boolean).at(-1) ?? "";
       if (resolvedRunId.length === 0) {
@@ -223,7 +256,21 @@ export function LiveGame(props: LiveGameProps) {
     void load();
   });
 
+  createEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const currentMeta = meta();
+    const name = currentMeta?.displayName ?? `Run ${runId()}`;
+    document.title = `${pageStateLabel()}: ${name} | BattleShipArena`;
+  });
+
   onCleanup(() => {
+    if (clockInterval !== undefined) {
+      clearInterval(clockInterval);
+    }
+
     cancelLoad();
     unsubscribe?.();
     unsubscribe = undefined;
@@ -231,84 +278,152 @@ export function LiveGame(props: LiveGameProps) {
 
   return (
     <section class={styles.shell}>
-      <div class={styles.panel}>
-        <div class={styles.header}>
-          <div>
-            <p class={styles.eyebrow}>Run {runId()}</p>
-            <h1 class={styles.title}>Live Battleship telemetry</h1>
+      <Show
+        when={phase() !== "notFound"}
+        fallback={
+          <div class={styles.panel}>
+            <p class={styles.eyebrow}>404</p>
+            <h1 class={styles.title}>Run not found</h1>
+            <p class={styles.phaseNote}>This run does not exist or is no longer available.</p>
+            <a class={styles.primaryLink} href="/play">
+              Start run
+            </a>
           </div>
-          <Show when={phase() === "live"}>
-            <button class={styles.abortButton} type="button" onClick={() => void handleAbort()}>
-              Abort run
-            </button>
-          </Show>
-        </div>
-
-        <div class={styles.boardWrap}>
-          <BoardView shots={shots()} />
-        </div>
-
-        <div class={styles.hudGrid}>
-          <article class={styles.hudCard}>
-            <span class={styles.hudLabel}>Shots fired</span>
-            <strong class={styles.hudValue}>{metrics().shotsFired}</strong>
-          </article>
-          <article class={styles.hudCard}>
-            <span class={styles.hudLabel}>Hits</span>
-            <strong class={styles.hudValue}>{metrics().hits}</strong>
-          </article>
-          <article class={styles.hudCard}>
-            <span class={styles.hudLabel}>Schema errors</span>
-            <strong class={styles.hudValue}>{metrics().schemaErrors}</strong>
-          </article>
-          <article class={styles.hudCard}>
-            <span class={styles.hudLabel}>Invalid coordinates</span>
-            <strong class={styles.hudValue}>{metrics().invalidCoordinates}</strong>
-          </article>
-        </div>
-
-        <Show when={meta()}>
-          {(currentMeta) => (
-            <dl class={styles.metaGrid}>
-              <div>
-                <dt class={styles.metaLabel}>Model</dt>
-                <dd class={styles.metaValue}>{currentMeta().displayName}</dd>
-              </div>
-              <div>
-                <dt class={styles.metaLabel}>Seed date</dt>
-                <dd class={styles.metaValue}>{currentMeta().seedDate}</dd>
-              </div>
-              <Show when={phase() === "terminal" && currentMeta().outcome !== null}>
-                <div>
-                  <dt class={styles.metaLabel}>Outcome</dt>
-                  <dd class={styles.metaValue}>{currentMeta().outcome}</dd>
+        }
+      >
+        <div class={styles.panel}>
+          <div class={styles.header}>
+            <div>
+              <p class={styles.eyebrow}>Run {runId()}</p>
+              <h1 class={styles.title}>
+                <span>Battleship</span>
+                <span class={styles.modelTitle}>{modelTitle()}</span>
+              </h1>
+              <Show when={meta()}>
+                <p class={styles.reasoningLine}>Reasoning: {reasoningStatus()}</p>
+              </Show>
+              <Show when={meta()}>
+                <div class={styles.timerRow} aria-label="Run timers">
+                  <span class={styles.timerPill}>
+                    <span class={styles.timerLabel}>Elapsed</span>
+                    <strong>{formatDurationMs(elapsedMs())}</strong>
+                  </span>
+                  <Show
+                    when={phase() === "terminal" && meta()?.outcome !== null}
+                    fallback={
+                      <Show when={lastShotElapsedMs() !== null}>
+                        <span class={styles.timerPill}>
+                          <span class={styles.timerLabel}>Since shot</span>
+                          <strong>{formatDurationMs(lastShotElapsedMs() ?? 0)}</strong>
+                        </span>
+                      </Show>
+                    }
+                  >
+                    <span class={styles.timerPill}>
+                      <span class={styles.timerLabel}>Result</span>
+                      <strong>{meta()?.outcome}</strong>
+                    </span>
+                  </Show>
+                  <Show when={phase() === "live"}>
+                    <button
+                      class={styles.abortButton}
+                      type="button"
+                      onClick={() => void handleAbort()}
+                    >
+                      Abort
+                    </button>
+                  </Show>
                 </div>
               </Show>
-            </dl>
-          )}
-        </Show>
-
-        <Show when={phase() === "loading"}>
-          <p class={styles.phaseNote}>Loading run state...</p>
-        </Show>
-        <Show when={phase() === "live"}>
-          <p class={styles.phaseNote}>Streaming new turns as they land.</p>
-        </Show>
-        <Show when={phase() === "terminal"}>
-          <p class={styles.phaseNote}>
-            Run complete. The board now reflects the terminal shot log.{" "}
-            <a href={`/runs/${encodeURIComponent(runId())}/replay`}>Open replay</a>
-          </p>
-        </Show>
-        <Show when={phase() === "error" && error() !== null}>
-          <div class={styles.errorBlock} role="alert">
-            <p class={styles.errorText}>{error()}</p>
-            <button class={styles.retryButton} type="button" onClick={() => void load()}>
-              Retry
-            </button>
+            </div>
           </div>
-        </Show>
-      </div>
+
+          <div class={styles.boardWrap}>
+            <BoardView shots={shots()} />
+          </div>
+
+          <div class={styles.hudGrid}>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Shots fired</span>
+              <strong class={styles.hudValue}>{metrics().shotsFired}</strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Hits</span>
+              <strong class={styles.hudValue}>{metrics().hits}</strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Schema errors</span>
+              <strong class={styles.hudValue}>{metrics().schemaErrors}</strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Timeouts</span>
+              <strong class={styles.hudValue}>{metrics().timeoutErrors}</strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Invalid coordinates</span>
+              <strong class={styles.hudValue}>{metrics().invalidCoordinates}</strong>
+            </article>
+          </div>
+
+          <div class={styles.resourceGrid}>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Tokens in</span>
+              <strong class={styles.resourceValue}>
+                {integerFormatter.format(metrics().tokensIn)}
+              </strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Tokens out</span>
+              <strong class={styles.resourceValue}>
+                {integerFormatter.format(metrics().tokensOut)}
+              </strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Reasoning tokens</span>
+              <strong class={styles.resourceValue}>
+                {integerFormatter.format(metrics().reasoningTokens)}
+              </strong>
+            </article>
+            <article class={styles.hudCard}>
+              <span class={styles.hudLabel}>Cost</span>
+              <strong class={styles.resourceValue}>
+                {formatUsdMicros(metrics().costUsdMicros)}
+              </strong>
+            </article>
+          </div>
+
+          <Show when={meta()}>
+            {(currentMeta) => (
+              <dl class={styles.metaGrid}>
+                <div>
+                  <dt class={styles.metaLabel}>Seed date</dt>
+                  <dd class={styles.metaValue}>{currentMeta().seedDate}</dd>
+                </div>
+              </dl>
+            )}
+          </Show>
+
+          <Show when={phase() === "loading"}>
+            <p class={styles.phaseNote}>Loading run state...</p>
+          </Show>
+          <Show when={phase() === "live"}>
+            <p class={styles.phaseNote}>Streaming new turns as they land.</p>
+          </Show>
+          <Show when={phase() === "terminal"}>
+            <p class={styles.phaseNote}>
+              Finished. <a href={`/runs/${encodeURIComponent(runId())}/replay`}>Replay</a>
+            </p>
+          </Show>
+          <Show when={phase() === "error" && error() !== null}>
+            <div class={styles.errorBlock} role="alert">
+              <p class={styles.errorText}>{error()}</p>
+              <button class={styles.retryButton} type="button" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
+          </Show>
+        </div>
+      </Show>
     </section>
   );
 }

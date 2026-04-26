@@ -5,7 +5,7 @@ import type { StartRunInput } from "@battleship-arena/shared";
 import { createQueries } from "../../src/db/queries.ts";
 import { withTempDatabase } from "../../src/db/with-temp-database.ts";
 import { createMockProvider } from "../../src/providers/mock.ts";
-import { createProviderRegistry } from "../../src/providers/types.ts";
+import { createProviderRegistry, type ProviderAdapter } from "../../src/providers/types.ts";
 import { createRunsRouter } from "../../src/api/runs.ts";
 import { sessionMiddleware } from "../../src/api/session.ts";
 
@@ -17,6 +17,9 @@ function createTestApp(
     getHandle(): null;
     shutdown(): Promise<void>;
   }> = {},
+  providers: Record<string, ProviderAdapter> = {
+    mock: createMockProvider({ delayMs: 0 }),
+  },
 ) {
   const started: StartRunInput[] = [];
   const manager = {
@@ -40,9 +43,7 @@ function createTestApp(
     "/api",
     createRunsRouter({
       queries: createQueries(db),
-      providers: createProviderRegistry({
-        mock: createMockProvider({ delayMs: 0 }),
-      }),
+      providers: createProviderRegistry(providers),
       manager,
     }),
   );
@@ -78,10 +79,169 @@ describe("POST /api/runs", () => {
         providerId: "mock",
         modelId: "mock-happy",
         apiKey,
+        reasoningEnabled: false,
         seedDate: new Date().toISOString().slice(0, 10),
       });
       expect(started[0]?.clientSession).toEqual(expect.any(String));
       expect(started[0]?.clientSession.length).toBeGreaterThan(0);
+    });
+  });
+
+  test("optional reasoning defaults to enabled when omitted", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const optionalProvider: ProviderAdapter = {
+        id: "openrouter",
+        models: [
+          {
+            id: "openai/gpt-5-nano",
+            displayName: "OpenAI: GPT-5 Nano",
+            hasReasoning: true,
+            reasoningMode: "optional",
+          },
+        ],
+        async call() {
+          throw new Error("call should not be used by router unit test");
+        },
+      };
+      const { app, started } = createTestApp(db, {}, { openrouter: optionalProvider });
+
+      const response = await app.request("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "openrouter",
+          modelId: "openai/gpt-5-nano",
+          apiKey: "test-key",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(started[0]?.reasoningEnabled).toBe(true);
+    });
+  });
+
+  test("optional reasoning can be disabled explicitly", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const optionalProvider: ProviderAdapter = {
+        id: "openrouter",
+        models: [
+          {
+            id: "openai/gpt-5-nano",
+            displayName: "OpenAI: GPT-5 Nano",
+            hasReasoning: true,
+            reasoningMode: "optional",
+          },
+        ],
+        async call() {
+          throw new Error("call should not be used by router unit test");
+        },
+      };
+      const { app, started } = createTestApp(db, {}, { openrouter: optionalProvider });
+
+      const response = await app.request("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "openrouter",
+          modelId: "openai/gpt-5-nano",
+          apiKey: "test-key",
+          reasoningEnabled: false,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(started[0]?.reasoningEnabled).toBe(false);
+    });
+  });
+
+  test("forced reasoning policies override submitted values", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const forcedProvider: ProviderAdapter = {
+        id: "policy-test",
+        models: [
+          {
+            id: "forced-on",
+            displayName: "Forced On",
+            hasReasoning: true,
+            reasoningMode: "forced_on",
+          },
+          {
+            id: "forced-off",
+            displayName: "Forced Off",
+            hasReasoning: false,
+            reasoningMode: "forced_off",
+          },
+        ],
+        async call() {
+          throw new Error("call should not be used by router unit test");
+        },
+      };
+      const { app, started } = createTestApp(db, {}, { "policy-test": forcedProvider });
+
+      const forcedOnResponse = await app.request("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "policy-test",
+          modelId: "forced-on",
+          apiKey: "test-key",
+          reasoningEnabled: false,
+        }),
+      });
+      const forcedOffResponse = await app.request("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "policy-test",
+          modelId: "forced-off",
+          apiKey: "test-key",
+          reasoningEnabled: true,
+        }),
+      });
+
+      expect(forcedOnResponse.status).toBe(200);
+      expect(forcedOffResponse.status).toBe(200);
+      expect(started.map((input) => input.reasoningEnabled)).toEqual([true, false]);
+    });
+  });
+
+  test("rejects non-boolean reasoningEnabled", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const { app } = createTestApp(db, {
+        start() {
+          throw new Error("start should not be called");
+        },
+      });
+
+      const response = await app.request("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerId: "mock",
+          modelId: "mock-happy",
+          apiKey: "test-key",
+          reasoningEnabled: "true",
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "invalid_input",
+          message: "Invalid input",
+          detail: { field: "reasoningEnabled" },
+        },
+      });
     });
   });
 

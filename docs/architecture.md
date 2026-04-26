@@ -13,16 +13,16 @@ graph TB
   visitor["Visitor<br/>(spectator)"]
   player["Player<br/>(brings API key)"]
   arena["<b>BattleShipArena</b><br/>Mobile-first PWA benchmark<br/>for LLMs playing Battleship"]
-  openai["OpenAI API<br/>(external)"]
-  anthropic["Anthropic API<br/>(external)"]
-  google["Google Gemini API<br/>(external)"]
+  openrouter["OpenRouter API<br/>(external)"]
+  opencode["OpenCode Go API<br/>(external)"]
+  zai["Z.AI Coding Plan API<br/>(external)"]
   offhost["Off-host backup target<br/>(external machine or object store)"]
 
   visitor -->|"Reads leaderboard and replays<br/>over HTTPS"| arena
   player -->|"Starts runs with own API key<br/>over HTTPS"| arena
-  arena -->|"Calls model per turn<br/>HTTPS, user-supplied key"| openai
-  arena -->|"Calls model per turn<br/>HTTPS, user-supplied key"| anthropic
-  arena -->|"Calls model per turn<br/>HTTPS, user-supplied key"| google
+  arena -->|"Calls model per turn<br/>HTTPS, user-supplied key"| openrouter
+  arena -->|"Calls model per turn<br/>HTTPS, user-supplied key"| opencode
+  arena -->|"Calls model per turn<br/>HTTPS, user-supplied key"| zai
   arena -->|"Ships daily snapshot<br/>rsync over SSH"| offhost
 ```
 
@@ -97,9 +97,10 @@ graph LR
   engine["runs/engine<br/>per-turn game loop"]
   outcome["runs/outcome<br/>terminal-state FSM +<br/>threshold checks"]
   bgen["board/generator<br/>seed -> ship layout"]
-  brend["board/renderer<br/>layout + shots -> PNG"]
-  padp["providers/*<br/>openrouter, openai, anthropic,<br/>google, zai, mock adapters"]
-  price["providers/pricing<br/>tokens -> cost_usd_micros"]
+  btext["board/text-renderer<br/>layout + shots -> text board"]
+  brend["board/renderer<br/>layout + shots -> PNG/SVG preview"]
+  padp["providers/*<br/>openrouter, opencode-go,<br/>zai, mock adapters"]
+  price["pricing/<br/>tokens -> cost_usd_micros"]
   dbmod["db/*<br/>Drizzle schema + migrations,<br/>typed queries,<br/>withTempDatabase"]
   err["errors<br/>closed-set codes +<br/>response envelope"]
   cfg["config<br/>env parsing,<br/>MAINTENANCE_SOFT,<br/>DATABASE_PATH"]
@@ -111,6 +112,7 @@ graph LR
   http --> cfg
   mgr --> engine
   engine --> bgen
+  engine --> btext
   engine --> brend
   engine --> padp
   engine --> outcome
@@ -154,9 +156,9 @@ graph LR
 ### 2.3 Shared package (`shared/`)
 
 - API request and response types, including the SSE event shapes.
-- The outcome enum (`won | dnf_shot_cap | dnf_schema_errors | dnf_budget | aborted_viewer | aborted_server_restart`).
+- The outcome enum (`won | dnf_shot_cap | dnf_schema_errors | dnf_budget | llm_unreachable | aborted_viewer | aborted_server_restart`).
 - The closed-set error code enum.
-- The shot JSON validator (a pure function).
+- The shot JSON validator (a pure function accepting canonical `cell` notation plus legacy row/col JSON).
 - Board constants (size, fleet composition, shot cap, schema-error threshold).
 
 **Why a shared package and not duplicated types.** The shot schema and the error envelope are load-bearing for every client-server interaction. Having one source of truth means the TypeScript compiler will tell us when the backend and the UI disagree, instead of a user discovering it by hitting a "hit" response the UI cannot render.
@@ -197,8 +199,8 @@ sequenceDiagram
   Mgr-->>User: SSE open + backlog from ring
 
   loop per turn (until terminal)
-    Eng->>Eng: render board PNG<br/>from seed + prior shots
-    Eng->>Prov: call(modelId, png, shipsRemaining, apiKey)
+    Eng->>Eng: render text board +<br/>rule-filtered candidates
+    Eng->>Prov: call(modelId, boardText,<br/>candidate prompt, apiKey)
     Prov->>LLM: HTTPS request
     LLM-->>Prov: text response + usage
     Prov-->>Eng: {rawText, tokens, cost}
@@ -215,6 +217,10 @@ sequenceDiagram
       Eng->>DB: INSERT run_shots(result=schema_error, ...)
       Eng->>Mgr: emit schema_error event
       Mgr-->>User: SSE event schema_error
+    else provider turn timeout
+      Eng->>DB: INSERT run_shots(result=timeout, ...)
+      Eng->>Mgr: emit timeout event
+      Mgr-->>User: SSE event timeout
     end
     Eng->>Eng: outcome FSM check
   end
@@ -231,8 +237,8 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> running
   running --> won: 17 ship cells hit
-  running --> dnf_shot_cap: 100 legal shots fired
-  running --> dnf_schema_errors: 5 consecutive schema errors
+  running --> dnf_shot_cap: 100 recorded shot attempts
+  running --> dnf_schema_errors: 5 consecutive schema_error/timeout rows
   running --> dnf_budget: cumulative cost exceeds user cap
   running --> llm_unreachable: provider non-retriable 4xx
   running --> aborted_viewer: POST /api/runs/{id}/abort
@@ -380,14 +386,14 @@ battleship-arena/
       board/
         generator.ts
         renderer.ts
+        text-renderer.ts
       providers/
         openrouter.ts
-        openai.ts
-        anthropic.ts
-        google.ts
+        opencode-go.ts
         zai.ts
         mock.ts
-        pricing.ts
+      pricing/
+        catalog.ts
       db/
         schema.ts                    # Drizzle schema
         migrations/                  # drizzle-kit generate output

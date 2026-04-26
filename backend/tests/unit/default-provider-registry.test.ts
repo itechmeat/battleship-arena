@@ -9,7 +9,7 @@ describe("createDefaultProviderRegistry", () => {
       mockTurnDelayMs: 0,
     });
 
-    expect(registry.listIds()).toEqual(["openrouter", "opencode-go", "mock"]);
+    expect(registry.listIds()).toEqual(["openrouter", "opencode-go", "zai", "mock"]);
   });
 
   test("excludes mock in production", () => {
@@ -18,6 +18,6 @@ describe("createDefaultProviderRegistry", () => {
       mockTurnDelayMs: 0,
     });
 
-    expect(registry.listIds()).toEqual(["openrouter", "opencode-go"]);
+    expect(registry.listIds()).toEqual(["openrouter", "opencode-go", "zai"]);
   });
 });

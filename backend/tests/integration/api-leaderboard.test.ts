@@ -18,6 +18,7 @@ function insertCompletedRun(
     shotsFired: number;
     durationMs: number;
     costUsdMicros: number;
+    reasoningEnabled?: boolean;
     startedAt?: number;
   },
 ) {
@@ -27,6 +28,7 @@ function insertCompletedRun(
     providerId: input.providerId,
     modelId: input.modelId,
     displayName: input.displayName,
+    reasoningEnabled: input.reasoningEnabled ?? false,
     startedAt: input.startedAt ?? 100,
     clientSession: input.clientSession,
     budgetUsdMicros: null,
@@ -53,7 +55,10 @@ describe("GET /api/leaderboard", () => {
       const app = new Hono();
       app.route(
         "/api",
-        createLeaderboardRouter({ queries: createQueries(db), todayUtc: () => "2026-04-24" }),
+        createLeaderboardRouter({
+          queries: createQueries(db),
+          todayUtc: () => "2026-04-24",
+        }),
       );
 
       const response = await app.request("/api/leaderboard");
@@ -140,6 +145,57 @@ describe("GET /api/leaderboard", () => {
       expect(filteredBody.rows).toHaveLength(1);
       expect(filteredBody.rows[0].rank).toBe(1);
       expect(filteredBody.rows[0].providerId).toBe("opencode-go");
+    });
+  });
+
+  test("today separates and filters the same model by reasoning setting", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      insertCompletedRun(queries, {
+        id: "reasoning-off",
+        seedDate: "2026-04-24",
+        providerId: "openrouter",
+        modelId: "openai/gpt-5-nano",
+        displayName: "OpenAI: GPT-5 Nano",
+        clientSession: "session-1",
+        outcome: "won",
+        shotsFired: 21,
+        durationMs: 1000,
+        costUsdMicros: 10,
+        reasoningEnabled: false,
+      });
+      insertCompletedRun(queries, {
+        id: "reasoning-on",
+        seedDate: "2026-04-24",
+        providerId: "openrouter",
+        modelId: "openai/gpt-5-nano",
+        displayName: "OpenAI: GPT-5 Nano",
+        clientSession: "session-1",
+        outcome: "won",
+        shotsFired: 19,
+        durationMs: 1000,
+        costUsdMicros: 20,
+        reasoningEnabled: true,
+      });
+
+      const app = new Hono();
+      app.route("/api", createLeaderboardRouter({ queries, todayUtc: () => "2026-04-24" }));
+      const response = await app.request("/api/leaderboard?scope=today");
+      const body = await response.json();
+
+      expect(body.rows).toHaveLength(2);
+      expect(body.rows.map((row: { reasoningEnabled: boolean }) => row.reasoningEnabled)).toEqual([
+        true,
+        false,
+      ]);
+
+      const filtered = await app.request("/api/leaderboard?scope=today&reasoningEnabled=false");
+      const filteredBody = await filtered.json();
+      expect(filteredBody.rows).toHaveLength(1);
+      expect(filteredBody.rows[0]).toMatchObject({
+        reasoningEnabled: false,
+        bestRunId: "reasoning-off",
+      });
     });
   });
 

@@ -15,6 +15,13 @@
       "when": 1777046400000,
       "tag": "0001_add_run_shots_llm_error",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777132800000,
+      "tag": "0002_add_runs_reasoning_enabled",
+      "breakpoints": true
     }
   ]
 }

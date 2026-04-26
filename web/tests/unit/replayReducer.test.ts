@@ -16,6 +16,7 @@ const run: RunMeta = {
   providerId: "openrouter",
   modelId: "openai/gpt-5-nano",
   displayName: "OpenAI: GPT-5 Nano",
+  reasoningEnabled: true,
   startedAt: 1,
   endedAt: 2,
   outcome: "won",
@@ -142,12 +143,17 @@ describe("replayReducer", () => {
 
     expect(replayReducer(start, { kind: "stepBack" })).toBe(start);
     expect(replayReducer(end, action)).toBe(end);
-    expect(replayReducer(loadedState({ idx: 1 }), action)).toMatchObject({ idx: 2 });
+    expect(replayReducer(loadedState({ idx: 1 }), action)).toMatchObject({
+      idx: 2,
+    });
   });
 
   test("load failure enters error state", () => {
     expect(
-      replayReducer(createInitialReplayState(), { kind: "loadFailed", message: "Nope" }),
+      replayReducer(createInitialReplayState(), {
+        kind: "loadFailed",
+        message: "Nope",
+      }),
     ).toEqual({
       status: "error",
       idx: 0,

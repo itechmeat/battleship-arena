@@ -20,6 +20,7 @@ const SHOT_RESULTS: readonly ShotResult[] = [
   "sunk",
   "schema_error",
   "invalid_coordinate",
+  "timeout",
 ];
 
 function isShotResult(value: unknown): value is ShotResult {
@@ -52,6 +53,7 @@ export interface InsertRunArgs {
   providerId: string;
   modelId: string;
   displayName: string;
+  reasoningEnabled: boolean;
   startedAt: number;
   clientSession: string;
   budgetUsdMicros: number | null;
@@ -106,6 +108,7 @@ interface LeaderboardRunRow {
   providerId: string;
   modelId: string;
   displayName: string;
+  reasoningEnabled: number;
   shotsFired: number;
   clientSession: string;
   startedAt: number;
@@ -153,7 +156,7 @@ function dedupeBestWins(
 }
 
 function modelKey(row: LeaderboardRunRow): string {
-  return `${row.providerId}\0${row.modelId}`;
+  return `${row.providerId}\0${row.modelId}\0${row.reasoningEnabled}`;
 }
 
 function rankRows(rows: readonly Omit<LeaderboardRow, "rank">[]): LeaderboardRow[] {
@@ -169,11 +172,12 @@ function leaderboardTodayRows(db: DatabaseHandle["db"], seedDate: string): Leade
         provider_id AS providerId,
         model_id AS modelId,
         display_name AS displayName,
+        reasoning_enabled AS reasoningEnabled,
         shots_fired AS shotsFired,
         client_session AS clientSession,
         started_at AS startedAt,
         ROW_NUMBER() OVER (
-          PARTITION BY client_session, provider_id, model_id
+          PARTITION BY client_session, provider_id, model_id, reasoning_enabled
           ORDER BY shots_fired ASC, started_at ASC, id ASC
         ) AS sessionRank
       FROM runs
@@ -185,6 +189,7 @@ function leaderboardTodayRows(db: DatabaseHandle["db"], seedDate: string): Leade
       providerId,
       modelId,
       displayName,
+      reasoningEnabled,
       shotsFired,
       clientSession,
       startedAt
@@ -202,11 +207,12 @@ function leaderboardAllRows(db: DatabaseHandle["db"]): LeaderboardRunRow[] {
         provider_id AS providerId,
         model_id AS modelId,
         display_name AS displayName,
+        reasoning_enabled AS reasoningEnabled,
         shots_fired AS shotsFired,
         client_session AS clientSession,
         started_at AS startedAt,
         ROW_NUMBER() OVER (
-          PARTITION BY client_session, provider_id, model_id, seed_date
+          PARTITION BY client_session, provider_id, model_id, reasoning_enabled, seed_date
           ORDER BY shots_fired ASC, started_at ASC, id ASC
         ) AS sessionSeedRank
       FROM runs
@@ -218,6 +224,7 @@ function leaderboardAllRows(db: DatabaseHandle["db"]): LeaderboardRunRow[] {
       providerId,
       modelId,
       displayName,
+      reasoningEnabled,
       shotsFired,
       clientSession,
       startedAt
@@ -228,7 +235,7 @@ function leaderboardAllRows(db: DatabaseHandle["db"]): LeaderboardRunRow[] {
 
 function aggregateTodayLeaderboardRows(rows: readonly LeaderboardRunRow[]): LeaderboardRow[] {
   const sessionBest = dedupeBestWins(rows, (row) =>
-    [row.clientSession, row.providerId, row.modelId].join("\0"),
+    [row.clientSession, row.providerId, row.modelId, row.reasoningEnabled].join("\0"),
   );
   const byModel = new Map<string, LeaderboardRunRow[]>();
 
@@ -249,6 +256,7 @@ function aggregateTodayLeaderboardRows(rows: readonly LeaderboardRunRow[]): Lead
           providerId: best.providerId,
           modelId: best.modelId,
           displayName: best.displayName,
+          reasoningEnabled: Boolean(best.reasoningEnabled),
           shotsToWin: best.shotsFired,
           runsCount: modelRows.length,
           bestRunId: best.id,
@@ -266,7 +274,7 @@ function aggregateTodayLeaderboardRows(rows: readonly LeaderboardRunRow[]): Lead
 
 function aggregateAllLeaderboardRows(rows: readonly LeaderboardRunRow[]): LeaderboardRow[] {
   const sessionSeedBest = dedupeBestWins(rows, (row) =>
-    [row.clientSession, row.providerId, row.modelId, row.seedDate].join("\0"),
+    [row.clientSession, row.providerId, row.modelId, row.reasoningEnabled, row.seedDate].join("\0"),
   );
   const byModel = new Map<string, LeaderboardRunRow[]>();
 
@@ -287,6 +295,7 @@ function aggregateAllLeaderboardRows(rows: readonly LeaderboardRunRow[]): Leader
           providerId: first.providerId,
           modelId: first.modelId,
           displayName: first.displayName,
+          reasoningEnabled: Boolean(first.reasoningEnabled),
           shotsToWin: median(modelRows.map((row) => row.shotsFired)),
           runsCount: modelRows.length,
           bestRunId: null,
@@ -322,6 +331,7 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
           providerId: args.providerId,
           modelId: args.modelId,
           displayName: args.displayName,
+          reasoningEnabled: args.reasoningEnabled,
           startedAt: args.startedAt,
           endedAt: null,
           outcome: null,
@@ -392,6 +402,7 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
         providerId: row.providerId,
         modelId: row.modelId,
         displayName: row.displayName,
+        reasoningEnabled: row.reasoningEnabled,
         startedAt: row.startedAt,
         endedAt: row.endedAt,
         outcome: readOutcome(row.outcome),

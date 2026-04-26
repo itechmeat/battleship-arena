@@ -1,7 +1,15 @@
 import { ERROR_CODES, OUTCOMES } from "@battleship-arena/shared";
 
-const SHOT_RESULTS = ["hit", "miss", "sunk", "schema_error", "invalid_coordinate"] as const;
+const SHOT_RESULTS = [
+  "hit",
+  "miss",
+  "sunk",
+  "schema_error",
+  "invalid_coordinate",
+  "timeout",
+] as const;
 const CELL_STATES = ["unknown", "miss", "hit", "sunk"] as const;
+const REASONING_MODES = ["optional", "forced_on", "forced_off"] as const;
 
 const errorEnvelopeSchema = {
   type: "object",
@@ -51,8 +59,14 @@ const modelPricingViewSchema = {
   type: "object",
   required: ["inputUsdPerMtok", "outputUsdPerMtok"],
   properties: {
-    inputUsdPerMtok: { type: "number", description: "USD per 1,000,000 input tokens." },
-    outputUsdPerMtok: { type: "number", description: "USD per 1,000,000 output tokens." },
+    inputUsdPerMtok: {
+      type: "number",
+      description: "USD per 1,000,000 input tokens.",
+    },
+    outputUsdPerMtok: {
+      type: "number",
+      description: "USD per 1,000,000 output tokens.",
+    },
   },
 } as const;
 
@@ -71,6 +85,7 @@ const providersResponseModelSchema = {
     "id",
     "displayName",
     "hasReasoning",
+    "reasoningMode",
     "pricing",
     "estimatedPromptTokens",
     "estimatedImageTokens",
@@ -80,9 +95,10 @@ const providersResponseModelSchema = {
     "lastReviewedAt",
   ],
   properties: {
-    id: { type: "string", example: "openrouter/claude-sonnet-4" },
-    displayName: { type: "string", example: "Claude Sonnet 4" },
+    id: { type: "string", example: "zai/glm-5.1" },
+    displayName: { type: "string", example: "GLM-5.1" },
     hasReasoning: { type: "boolean" },
+    reasoningMode: { type: "string", enum: [...REASONING_MODES] },
     pricing: { $ref: "#/components/schemas/ModelPricingView" },
     estimatedPromptTokens: { type: "integer" },
     estimatedImageTokens: { type: "integer" },
@@ -97,8 +113,8 @@ const providersResponseProviderSchema = {
   type: "object",
   required: ["id", "displayName", "models"],
   properties: {
-    id: { type: "string", example: "openrouter" },
-    displayName: { type: "string", example: "OpenRouter" },
+    id: { type: "string", example: "zai" },
+    displayName: { type: "string", example: "Z.AI" },
     models: {
       type: "array",
       items: { $ref: "#/components/schemas/ProvidersResponseModel" },
@@ -125,6 +141,7 @@ const runMetaSchema = {
     "providerId",
     "modelId",
     "displayName",
+    "reasoningEnabled",
     "startedAt",
     "endedAt",
     "outcome",
@@ -142,12 +159,15 @@ const runMetaSchema = {
   properties: {
     id: { type: "string", description: "ULID." },
     seedDate: { type: "string", format: "date", example: "2026-04-24" },
-    providerId: { type: "string", example: "openrouter" },
-    modelId: { type: "string", example: "openrouter/claude-sonnet-4" },
-    displayName: { type: "string", example: "Claude Sonnet 4" },
+    providerId: { type: "string", example: "zai" },
+    modelId: { type: "string", example: "zai/glm-5.1" },
+    displayName: { type: "string", example: "GLM-5.1" },
+    reasoningEnabled: { type: "boolean" },
     startedAt: { type: "integer", format: "int64" },
     endedAt: { type: ["integer", "null"], format: "int64" },
-    outcome: { oneOf: [{ $ref: "#/components/schemas/Outcome" }, { type: "null" }] },
+    outcome: {
+      oneOf: [{ $ref: "#/components/schemas/Outcome" }, { type: "null" }],
+    },
     shotsFired: { type: "integer" },
     hits: { type: "integer" },
     schemaErrors: { type: "integer" },
@@ -212,6 +232,7 @@ const leaderboardRowSchema = {
     "providerId",
     "modelId",
     "displayName",
+    "reasoningEnabled",
     "shotsToWin",
     "runsCount",
     "bestRunId",
@@ -221,6 +242,7 @@ const leaderboardRowSchema = {
     providerId: { type: "string" },
     modelId: { type: "string" },
     displayName: { type: "string" },
+    reasoningEnabled: { type: "boolean" },
     shotsToWin: {
       type: "number",
       description:
@@ -244,7 +266,10 @@ const leaderboardResponseSchema = {
       format: "date",
       description: "Populated for scope=today, null for scope=all.",
     },
-    rows: { type: "array", items: { $ref: "#/components/schemas/LeaderboardRow" } },
+    rows: {
+      type: "array",
+      items: { $ref: "#/components/schemas/LeaderboardRow" },
+    },
   },
 } as const;
 
@@ -252,12 +277,17 @@ const startRunRequestSchema = {
   type: "object",
   required: ["providerId", "modelId", "apiKey"],
   properties: {
-    providerId: { type: "string", example: "openrouter" },
-    modelId: { type: "string", example: "openrouter/claude-sonnet-4" },
+    providerId: { type: "string", example: "zai" },
+    modelId: { type: "string", example: "zai/glm-5.1" },
     apiKey: {
       type: "string",
       description:
         "Held only in the run task's closure. Never written to SQLite, never logged, never echoed in any response.",
+    },
+    reasoningEnabled: {
+      type: "boolean",
+      description:
+        "Requested reasoning state. The backend resolves this against catalog policy: forced_on models persist true, forced_off models persist false, optional models persist the supplied value or true when omitted.",
     },
     budgetUsd: {
       type: ["number", "null"],
@@ -283,7 +313,10 @@ const runShotsResponseSchema = {
   required: ["runId", "shots"],
   properties: {
     runId: { type: "string" },
-    shots: { type: "array", items: { $ref: "#/components/schemas/RunShotRow" } },
+    shots: {
+      type: "array",
+      items: { $ref: "#/components/schemas/RunShotRow" },
+    },
   },
 } as const;
 
@@ -291,7 +324,9 @@ const abortRunResponseSchema = {
   type: "object",
   required: ["outcome"],
   properties: {
-    outcome: { oneOf: [{ $ref: "#/components/schemas/Outcome" }, { type: "null" }] },
+    outcome: {
+      oneOf: [{ $ref: "#/components/schemas/Outcome" }, { type: "null" }],
+    },
   },
 } as const;
 
@@ -403,12 +438,26 @@ export const OPENAPI_DOCUMENT = {
       "Canonical behaviour specs live under `openspec/specs/` and `docs/spec.md` section 5.2.",
     ].join("\n"),
   },
-  servers: [{ url: "/api", description: "Backend API root (served behind Caddy on production)." }],
+  servers: [
+    {
+      url: "/api",
+      description: "Backend API root (served behind Caddy on production).",
+    },
+  ],
   tags: [
     { name: "system", description: "Health and platform status." },
-    { name: "runs", description: "Start, observe, and abort a Battleship run." },
-    { name: "catalog", description: "Providers, pricing, and the daily board preview." },
-    { name: "leaderboard", description: "Ranked results for today and all-time." },
+    {
+      name: "runs",
+      description: "Start, observe, and abort a Battleship run.",
+    },
+    {
+      name: "catalog",
+      description: "Providers, pricing, and the daily board preview.",
+    },
+    {
+      name: "leaderboard",
+      description: "Ranked results for today and all-time.",
+    },
     { name: "docs", description: "API documentation surface." },
   ],
   paths: {
@@ -421,7 +470,9 @@ export const OPENAPI_DOCUMENT = {
           "200": {
             description: "Service is live.",
             content: {
-              "application/json": { schema: { $ref: "#/components/schemas/HealthResponse" } },
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HealthResponse" },
+              },
             },
           },
         },
@@ -451,9 +502,13 @@ export const OPENAPI_DOCUMENT = {
               "Cache-Control": { schema: { type: "string" } },
               ETag: { schema: { type: "string" } },
             },
-            content: { "image/png": { schema: { type: "string", format: "binary" } } },
+            content: {
+              "image/png": { schema: { type: "string", format: "binary" } },
+            },
           },
-          "304": { description: "Not modified (if `If-None-Match` matched the ETag)." },
+          "304": {
+            description: "Not modified (if `If-None-Match` matched the ETag).",
+          },
           "400": errorResponse("Malformed or future date.", ["invalid_input"]),
         },
       },
@@ -499,9 +554,10 @@ export const OPENAPI_DOCUMENT = {
                 realRun: {
                   summary: "Run a real provider with a user-supplied key",
                   value: {
-                    providerId: "openrouter",
-                    modelId: "openrouter/claude-sonnet-4",
-                    apiKey: "sk-or-v1-xxxxxxxx",
+                    providerId: "zai",
+                    modelId: "zai/glm-5.1",
+                    apiKey: "zai-xxxxxxxx",
+                    reasoningEnabled: true,
                     budgetUsd: 0.25,
                   },
                 },
@@ -511,6 +567,7 @@ export const OPENAPI_DOCUMENT = {
                     providerId: "mock",
                     modelId: "mock-happy",
                     apiKey: "placeholder",
+                    reasoningEnabled: false,
                   },
                 },
               },
@@ -555,7 +612,9 @@ export const OPENAPI_DOCUMENT = {
           "200": {
             description: "Run metadata.",
             content: {
-              "application/json": { schema: { $ref: "#/components/schemas/RunMeta" } },
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RunMeta" },
+              },
             },
           },
           "404": errorResponse("Run not found.", ["run_not_found"]),
@@ -672,6 +731,13 @@ export const OPENAPI_DOCUMENT = {
             required: false,
             schema: { type: "string" },
             description: "Narrow to a single model id.",
+          },
+          {
+            name: "reasoningEnabled",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+            description: "Narrow to runs with reasoning on or off.",
           },
         ],
         responses: {

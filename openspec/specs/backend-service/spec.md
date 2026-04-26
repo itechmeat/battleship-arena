@@ -60,7 +60,7 @@ A config loader SHALL read `DATABASE_PATH`, `PORT`, `MAINTENANCE_SOFT`, `SHUTDOW
 
 ### Requirement: Drizzle schema declares runs and run_shots
 
-The backend SHALL declare a Drizzle schema for two tables, `runs` and `run_shots`, whose columns match the complete list defined in `docs/spec.md` section 5.1. The `runs` table MUST include `id` (text primary key), `seed_date`, `provider_id`, `model_id`, `display_name`, `started_at`, `ended_at`, `outcome`, `shots_fired`, `hits`, `schema_errors`, `invalid_coordinates`, `duration_ms`, `tokens_in`, `tokens_out`, `reasoning_tokens`, `cost_usd_micros`, `budget_usd_micros`, and `client_session`. The `run_shots` table MUST include `run_id`, `idx`, `row`, `col`, `result`, `raw_response`, `reasoning_text`, `tokens_in`, `tokens_out`, `reasoning_tokens`, `cost_usd_micros`, `duration_ms`, and `created_at`, and MUST declare a composite primary key `(run_id, idx)`. The `run_shots.run_id` column MUST be a foreign key that references `runs.id` and cascades on delete. Foreign-key enforcement MUST be enabled on every database handle the backend opens.
+The backend SHALL declare a Drizzle schema for two tables, `runs` and `run_shots`, whose columns match the complete list defined in `docs/spec.md` section 5.1. The `runs` table MUST include `id` (text primary key), `seed_date`, `provider_id`, `model_id`, `display_name`, `started_at`, `ended_at`, `outcome`, `shots_fired`, `hits`, `schema_errors`, `invalid_coordinates`, `duration_ms`, `tokens_in`, `tokens_out`, `reasoning_tokens`, `cost_usd_micros`, `budget_usd_micros`, and `client_session`. The `run_shots` table MUST include `run_id`, `idx`, `row`, `col`, `result`, `raw_response`, `reasoning_text`, `llm_error`, `tokens_in`, `tokens_out`, `reasoning_tokens`, `cost_usd_micros`, `duration_ms`, and `created_at`, and MUST declare a composite primary key `(run_id, idx)`. The `run_shots.run_id` column MUST be a foreign key that references `runs.id` and cascades on delete. Foreign-key enforcement MUST be enabled on every database handle the backend opens.
 
 #### Scenario: runs table has the full column set
 
@@ -93,12 +93,12 @@ On startup the backend SHALL apply every pending Drizzle migration inside a sing
 
 ### Requirement: openDatabase is the only runtime primitive that constructs a Database
 
-The backend SHALL expose an `openDatabase(path)` primitive as the sole runtime code path that calls `new Database(...)`. Before returning the handle, `openDatabase` MUST enable WAL journaling and set `PRAGMA foreign_keys = ON`. Every other backend module and every test helper that needs a database handle MUST obtain it by calling `openDatabase` either directly or through another helper that delegates to it.
+The backend SHALL expose an `openDatabase(path)` primitive as the sole runtime code path that calls `new Database(...)`. Before returning the handle, `openDatabase` MUST set `PRAGMA busy_timeout = 5000`, enable WAL journaling, and set `PRAGMA foreign_keys = ON`. Every other backend module and every test helper that needs a database handle MUST obtain it by calling `openDatabase` either directly or through another helper that delegates to it.
 
-#### Scenario: openDatabase enables WAL and foreign keys
+#### Scenario: openDatabase enables busy timeout, WAL, and foreign keys
 
 - **WHEN** `openDatabase(path)` is invoked with a valid filesystem path
-- **THEN** the returned handle reports `journal_mode` as `wal` and `foreign_keys` as `on` when those pragmas are queried
+- **THEN** the returned handle reports `busy_timeout` as `5000`, `journal_mode` as `wal`, and `foreign_keys` as `on` when those pragmas are queried
 
 #### Scenario: No other module instantiates Database directly
 
@@ -140,12 +140,12 @@ The file `backend/tests/setup.ts` SHALL be preloaded by Bun's test runner and MU
 
 ### Requirement: bootstrap(config) wires startup order and returns a handle
 
-The backend SHALL expose a `bootstrap(config)` function that, when given a valid configuration object, opens the database via `openDatabase`, applies pending migrations inside a transaction, constructs the Hono app via the app factory, starts `Bun.serve` on the configured port, and returns a handle `{ server, sqlite, config }`. The returned handle's `server` MUST refer to the running `Bun.serve` instance, `sqlite` MUST refer to the open database handle, and `config` MUST be the configuration object passed in. The contract guarantees that by the time `bootstrap` returns, migrations have completed and the HTTP listener is accepting connections.
+The backend SHALL expose a `bootstrap(config)` function that, when given a valid configuration object, opens the database via `openDatabase`, applies pending migrations inside a transaction, constructs the Hono app via the app factory, starts `Bun.serve` on the configured port, installs process signal handlers, and returns a handle `{ server, sqlite, manager, config }`. The returned handle's `server` MUST refer to the running `Bun.serve` instance, `sqlite` MUST refer to the open database handle, `manager` MUST refer to the active run manager, and `config` MUST be the configuration object passed in. The contract guarantees that by the time `bootstrap` returns, migrations have completed and the HTTP listener is accepting connections. Re-entering `bootstrap` in watch/test mode MUST shut down any previous runtime handle before binding the new server.
 
-#### Scenario: bootstrap returns a handle with server, sqlite, and config
+#### Scenario: bootstrap returns a handle with server, sqlite, manager, and config
 
 - **WHEN** `bootstrap(config)` is awaited with a valid configuration
-- **THEN** it returns an object whose `server`, `sqlite`, and `config` fields are all populated and non-null
+- **THEN** it returns an object whose `server`, `sqlite`, `manager`, and `config` fields are all populated and non-null
 
 #### Scenario: Migrations complete before the listener accepts connections
 

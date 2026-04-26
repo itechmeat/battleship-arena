@@ -8,7 +8,7 @@ TBD - created by archiving change s2a-game-loop-mock. Update Purpose after archi
 
 ### Requirement: Outcome FSM reducer
 
-The backend SHALL expose `reduceOutcome(state, event, context)` as a pure function returning `{ state, outcome: Outcome | null }`. State carries `shotsFired`, `hits`, `consecutiveSchemaErrors`, `schemaErrors`, `invalidCoordinates`, and `accumulatedCostMicros` (a non-negative integer initialised to `0`). The `context` argument carries `budgetMicros: number | null` - the run's declared budget cap in integer micros, or `null` when no cap was declared. The event union covers `hit`, `miss`, `sunk`, `schema_error`, `invalid_coordinate`, and `abort` (with `reason: "viewer" | "server_restart"`); every non-`abort` event MUST additionally include `costUsdMicros: number` (a non-negative integer reported by the adapter for that turn). The reducer MUST apply the transition rules from `docs/spec.md` sections 3.5 and 4.2 exactly: `hit`/`sunk` increment `shotsFired` and `hits`, reset `consecutiveSchemaErrors` to 0, and emit `won` when `hits` reaches `TOTAL_SHIP_CELLS` (17); `miss` increments `shotsFired` only and resets the streak; `invalid_coordinate` increments both `shotsFired` and `invalidCoordinates` and resets the streak; `schema_error` increments `schemaErrors` and `consecutiveSchemaErrors` without touching `shotsFired`, and emits `dnf_schema_errors` when the streak reaches `SCHEMA_ERROR_DNF_THRESHOLD` (5); a non-terminal `hit`/`miss`/`invalid_coordinate` emits `dnf_shot_cap` when `shotsFired` reaches `SHOT_CAP` (100); `abort` emits `aborted_viewer` or `aborted_server_restart` per the supplied reason. For every non-`abort` event the reducer MUST also add `event.costUsdMicros` to `state.accumulatedCostMicros`. After the standard transitions are evaluated, the reducer SHALL evaluate terminal conditions in the fixed priority order `won > dnf_shot_cap > dnf_schema_errors > dnf_budget`; when two or more conditions fire on the same pass, the earliest-listed outcome wins and the later ones MUST NOT be returned. The reducer MUST emit `dnf_budget` if and only if `context.budgetMicros !== null AND context.budgetMicros > 0 AND the updated accumulatedCostMicros >= context.budgetMicros`, AND no earlier-priority outcome already fired on this pass. The reducer MUST NOT perform I/O.
+The backend SHALL expose `reduceOutcome(state, event, context)` as a pure function returning `{ state, outcome: Outcome | null }`. State carries `shotsFired`, `hits`, `consecutiveSchemaErrors`, `schemaErrors`, `invalidCoordinates`, and `accumulatedCostMicros` (a non-negative integer initialised to `0`). The `context` argument carries `budgetMicros: number | null` - the run's declared budget cap in integer micros, or `null` when no cap was declared. The event union covers `hit`, `miss`, `sunk`, `schema_error`, `timeout`, `invalid_coordinate`, and `abort` (with `reason: "viewer" | "server_restart"`); every non-`abort` event MUST additionally include `costUsdMicros: number` (a non-negative integer reported by the adapter for that turn). The reducer MUST apply the transition rules from `docs/spec.md` sections 3.5 and 4.2 exactly: `hit`/`sunk` increment `shotsFired` and `hits`, reset `consecutiveSchemaErrors` to 0, and emit `won` when `hits` reaches `TOTAL_SHIP_CELLS` (17); `miss` increments `shotsFired` only and resets the streak; `invalid_coordinate` increments both `shotsFired` and `invalidCoordinates` and resets the streak; `schema_error` and `timeout` each increment `shotsFired`, `schemaErrors`, and `consecutiveSchemaErrors`, and emit `dnf_schema_errors` when the streak reaches `SCHEMA_ERROR_DNF_THRESHOLD` (5); a non-terminal `hit`/`miss`/`schema_error`/`timeout`/`invalid_coordinate` emits `dnf_shot_cap` when `shotsFired` reaches `SHOT_CAP` (100); `abort` emits `aborted_viewer` or `aborted_server_restart` per the supplied reason. For every non-`abort` event the reducer MUST also add `event.costUsdMicros` to `state.accumulatedCostMicros`. After the standard transitions are evaluated, the reducer SHALL evaluate terminal conditions in the fixed priority order `won > dnf_shot_cap > dnf_schema_errors > dnf_budget`; when two or more conditions fire on the same pass, the earliest-listed outcome wins and the later ones MUST NOT be returned. The reducer MUST emit `dnf_budget` if and only if `context.budgetMicros !== null AND context.budgetMicros > 0 AND the updated accumulatedCostMicros >= context.budgetMicros`, AND no earlier-priority outcome already fired on this pass. The reducer MUST NOT perform I/O.
 
 #### Scenario: 17th hit wins
 
@@ -23,7 +23,12 @@ The backend SHALL expose `reduceOutcome(state, event, context)` as a pure functi
 #### Scenario: 5 consecutive schema errors reach dnf_schema_errors
 
 - **WHEN** the reducer receives 5 consecutive `schema_error` events (each with `costUsdMicros: 0`) starting from the initial state with `context: { budgetMicros: null }`
-- **THEN** after the 5th the result's `outcome` equals `"dnf_schema_errors"`
+- **THEN** after the 5th the result's `outcome` equals `"dnf_schema_errors"` and `shotsFired === 5`
+
+#### Scenario: 5 consecutive timeouts reach dnf_schema_errors
+
+- **WHEN** the reducer receives 5 consecutive `timeout` events (each with `costUsdMicros: 0`) starting from the initial state with `context: { budgetMicros: null }`
+- **THEN** after the 5th the result's `outcome` equals `"dnf_schema_errors"`, `shotsFired === 5`, and `schemaErrors === 5`
 
 #### Scenario: Hit resets the consecutive-schema-error streak
 
@@ -33,7 +38,7 @@ The backend SHALL expose `reduceOutcome(state, event, context)` as a pure functi
 #### Scenario: invalid_coordinate contributes to shot cap and resets streak
 
 - **WHEN** the reducer receives 1 `schema_error` followed by 1 `invalid_coordinate` (both with `costUsdMicros: 0`)
-- **THEN** resulting state has `shotsFired === 1`, `invalidCoordinates === 1`, `consecutiveSchemaErrors === 0`
+- **THEN** resulting state has `shotsFired === 2`, `invalidCoordinates === 1`, `consecutiveSchemaErrors === 0`
 
 #### Scenario: 100 invalid_coordinates also reach dnf_shot_cap
 
@@ -145,7 +150,7 @@ The backend SHALL expose a `Manager` interface constructed via `createManager(de
 
 ### Requirement: Per-turn game engine persists and emits
 
-The backend SHALL expose `runEngine(runId, input, signal, emit, deps)` that drives the full game loop against the provider adapter keyed by `input.providerId` in `deps.providers`. Each turn MUST: (a) compute a `BoardView` from prior shots and the layout from `deps.generate(input.seedDate)`; (b) render the PNG via `deps.renderBoard`; (c) compute the ships-remaining text preamble; (d) call `adapter.call(callInput, signal)` with the `seedDate`, `priorShots`, and other fields documented by the provider interface; (e) parse `rawText` with `parseShot`; (f) classify the turn as `hit`, `miss`, `sunk`, `schema_error`, or `invalid_coordinate`, insert the appropriate `run_shots` row (raw response truncated to 8 KiB, reasoning to 2 KiB), and emit the corresponding `shot` SSE event; (g) call `reduceOutcome` and exit the loop on a terminal outcome. The engine MUST emit an `open` SSE event before the loop and, except for `aborted_server_restart`, an `outcome` SSE event after the loop and write the finalized `runs` row (`outcome`, `ended_at`, counters). On `AbortError` whose reason is `server_restart`, the engine MUST exit without writing the terminal row; startup reconciliation writes it instead. The engine MUST read `input.apiKey` only within its own closure; it MUST NOT place it in any variable reachable from outside.
+The backend SHALL expose `runEngine(runId, input, signal, emit, deps)` that drives the full game loop against the provider adapter keyed by `input.providerId` in `deps.providers`. Each turn MUST: (a) compute a `BoardView` from prior shots and the layout from `deps.generate(input.seedDate)`; (b) render the compact text board from that view; (c) compute ships remaining and pass the current consecutive schema-error count to the provider prompt builder; (d) call `adapter.call(callInput, signal)` with `boardText`, `seedDate`, `priorShots`, and the other fields documented by the provider interface, under the per-turn timeout guard; (e) parse `rawText` with `parseShot`; (f) classify the turn as `hit`, `miss`, `sunk`, `schema_error`, `timeout`, or `invalid_coordinate`, insert the appropriate `run_shots` row (raw response truncated to 8 KiB, reasoning to 2 KiB), and emit the corresponding `shot` SSE event including provider usage/timing fields when available; (g) call `reduceOutcome` and exit the loop on a terminal outcome. The engine MUST emit an `open` SSE event before the loop and, except for `aborted_server_restart`, an `outcome` SSE event after the loop and write the finalized `runs` row (`outcome`, `ended_at`, counters). On `AbortError` whose reason is `server_restart`, the engine MUST exit without writing the terminal row; startup reconciliation writes it instead. The engine MUST read `input.apiKey` only within its own closure; it MUST NOT place it in any variable reachable from outside.
 
 #### Scenario: mock-happy reaches `won` and persists all shots
 
@@ -160,7 +165,12 @@ The backend SHALL expose `runEngine(runId, input, signal, emit, deps)` that driv
 #### Scenario: mock-schema-errors reaches `dnf_schema_errors`
 
 - **WHEN** `runEngine` runs with `modelId: "mock-schema-errors"`
-- **THEN** the run row has `outcome === "dnf_schema_errors"` and exactly 5 `run_shots` rows with `result === "schema_error"`
+- **THEN** the run row has `outcome === "dnf_schema_errors"`, `shotsFired === 5`, and exactly 5 `run_shots` rows with `result === "schema_error"`
+
+#### Scenario: Provider turn timeout records timeout rows
+
+- **WHEN** `runEngine` runs with a provider that does not complete before the per-turn timeout
+- **THEN** the run records `run_shots` rows with `result === "timeout"`, increments `shotsFired`, and can reach `dnf_schema_errors` after five consecutive timeout rows
 
 #### Scenario: viewer abort resolves to aborted_viewer
 
@@ -216,12 +226,12 @@ The backend engine SHALL mirror the FSM's `accumulatedCostMicros` counter for ea
 
 ### Requirement: ProviderError mapping to turn classification
 
-The engine SHALL catch a thrown `ProviderError` raised by the provider adapter during `adapter.call` and SHALL branch on its `kind` discriminant. When `kind === "transient"`, the engine MUST record the turn as a `schema_error` turn by inserting a `run_shots` row with the following shape: `result = "schema_error"`, `row = NULL`, `col = NULL`, `raw_response = ""`, `reasoning_text = NULL`, `tokens_in = 0`, `tokens_out = 0`, `reasoning_tokens = NULL`, `cost_usd_micros = 0`, `duration_ms` set to the elapsed wall-clock of the failed adapter call, `created_at` set to the insertion time in Unix ms, and `llm_error` set to the `ProviderError.cause` string (truncated to 2 KiB if longer). The engine MUST then thread an FSM event of kind `schema_error` with `costUsdMicros: 0` through `reduceOutcome` so that `schemaErrors` and `consecutiveSchemaErrors` increment and the `dnf_schema_errors` streak can fire, and MUST NOT terminate the run on this event alone. When `kind === "unreachable"`, the engine MUST terminate the run with outcome `llm_unreachable`, MUST NOT insert any `run_shots` row for the failing turn, MUST NOT increment `schemaErrors` or `consecutiveSchemaErrors`, and MUST write the terminal `runs` row with the run's existing counters and `runs.cost_usd_micros` preserved at the value recorded before the failure.
+The engine SHALL catch a thrown `ProviderError` raised by the provider adapter during `adapter.call` and SHALL branch on its `kind` discriminant. When `kind === "transient"`, the engine MUST record the turn as a `schema_error` turn by default, or as a `timeout` turn when the error code identifies the engine's per-turn timeout, by inserting a `run_shots` row with the following shape: `result = "schema_error" | "timeout"`, `row = NULL`, `col = NULL`, `raw_response = ""`, `reasoning_text = NULL`, `tokens_in = 0`, `tokens_out = 0`, `reasoning_tokens = NULL`, `cost_usd_micros = 0`, `duration_ms` set to the elapsed wall-clock of the failed adapter call, `created_at` set to the insertion time in Unix ms, and `llm_error` set to the `ProviderError.cause` string (truncated to 2 KiB if longer). The engine MUST then thread an FSM event of the same failed result kind with `costUsdMicros: 0` through `reduceOutcome` so that `schemaErrors` and `consecutiveSchemaErrors` increment and the `dnf_schema_errors` streak can fire, and MUST NOT terminate the run on this event alone. When `kind === "unreachable"`, the engine MUST terminate the run with outcome `llm_unreachable`, MUST NOT insert any `run_shots` row for the failing turn, MUST NOT increment `schemaErrors` or `consecutiveSchemaErrors`, and MUST write the terminal `runs` row with the run's existing counters and `runs.cost_usd_micros` preserved at the value recorded before the failure.
 
 #### Scenario: Transient provider error inserts a fully specified schema_error row
 
 - **WHEN** the provider adapter throws `ProviderError { kind: "transient", cause: "503 upstream" }` on a single turn while `consecutiveSchemaErrors` is `0`
-- **THEN** the engine inserts one `run_shots` row with `result = "schema_error"`, `row = NULL`, `col = NULL`, `raw_response = ""`, `reasoning_text = NULL`, `tokens_in = 0`, `tokens_out = 0`, `reasoning_tokens = NULL`, `cost_usd_micros = 0`, a non-negative `duration_ms`, a non-null `created_at`, `llm_error = "503 upstream"`, AND `schemaErrors` increments to `1`, `consecutiveSchemaErrors` increments to `1`, and the run remains non-terminal
+- **THEN** the engine inserts one `run_shots` row with `result = "schema_error"`, `row = NULL`, `col = NULL`, `raw_response = ""`, `reasoning_text = NULL`, `tokens_in = 0`, `tokens_out = 0`, `reasoning_tokens = NULL`, `cost_usd_micros = 0`, a non-negative `duration_ms`, a non-null `created_at`, `llm_error = "503 upstream"`, AND `shotsFired`, `schemaErrors`, and `consecutiveSchemaErrors` each increment to `1`, and the run remains non-terminal
 
 #### Scenario: Unreachable provider error terminates with clean counters and no shot row
 
@@ -231,7 +241,7 @@ The engine SHALL catch a thrown `ProviderError` raised by the provider adapter d
 #### Scenario: Five consecutive transient errors reach dnf_schema_errors
 
 - **WHEN** the provider adapter throws `ProviderError { kind: "transient" }` on five consecutive turns starting from a fresh state
-- **THEN** the engine records five `run_shots` rows with `result = "schema_error"` and `llm_error` populated from each call's `cause`, and the fifth turn's FSM pass emits outcome `dnf_schema_errors`
+- **THEN** the engine records five `run_shots` rows with `result = "schema_error"` and `llm_error` populated from each call's `cause`, persists `shotsFired === 5`, and the fifth turn's FSM pass emits outcome `dnf_schema_errors`
 
 ### Requirement: run_shots.llm_error column exists in the schema
 
@@ -246,3 +256,30 @@ The `run_shots` table SHALL carry a nullable `llm_error TEXT` column for recordi
 
 - **WHEN** a successful `hit`/`miss`/`sunk`/`invalid_coordinate` turn is persisted
 - **THEN** that row's `llm_error` value is `NULL`
+
+### Requirement: Run rows persist reasoning state
+
+The `runs` table SHALL store a non-null boolean `reasoning_enabled` value for every run. Existing rows migrated into the new schema MUST receive a deterministic default of `true`.
+
+#### Scenario: Run insert includes reasoning_enabled
+
+- **WHEN** a new run row is inserted
+- **THEN** the row stores the resolved reasoning state in `reasoning_enabled`
+
+### Requirement: Run lifecycle threads reasoning into provider calls
+
+The run engine SHALL receive the resolved reasoning state as part of its run input and SHALL thread it to provider adapters so request-shape logic can honor the selected or forced mode.
+
+#### Scenario: Provider call input includes resolved reasoning state
+
+- **WHEN** the engine calls a provider adapter for a run started with reasoning disabled
+- **THEN** the provider call input exposes `reasoningEnabled === false`
+
+### Requirement: Terminal outcome is displayed in timer area
+
+The live game UI SHALL surface terminal outcome in place of the per-shot timer once a run finishes instead of rendering a separate bottom `Outcome: <value>` block.
+
+#### Scenario: Won run updates timer status
+
+- **WHEN** a live run transitions to outcome `won`
+- **THEN** the timer row displays the completed outcome where the shot timer was and no separate bottom Outcome block is rendered

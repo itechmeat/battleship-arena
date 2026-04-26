@@ -10,7 +10,7 @@ TBD - created by archiving change s3-real-providers-pricing-leaderboard-replays.
 
 `GET /api/providers` SHALL return a JSON body of shape `ProvidersResponse`: an array of providers grouped by `providerId`, each with `displayName` and a sorted `models` array. Every model entry MUST include `id`, `displayName`, `hasReasoning`, `pricing.inputUsdPerMtok`, `pricing.outputUsdPerMtok`, `estimatedPromptTokens`, `estimatedImageTokens`, `estimatedOutputTokensPerShot`, `estimatedCostRange.minUsd`, `estimatedCostRange.maxUsd`, `priceSource`, and `lastReviewedAt`.
 
-The `estimatedCostRange` fields MUST be computed deterministically from the model's pricing entry. Let `perTurnMicros` equal the sum `floor((estimatedPromptTokens + estimatedImageTokens) * inputMicrosPerMtok / 1_000_000) + floor(estimatedOutputTokensPerShot * outputMicrosPerMtok / 1_000_000)` as defined in the `pricing` capability. The response MUST then satisfy `estimatedCostRange.minUsd = (perTurnMicros * 17) / 1_000_000` and `estimatedCostRange.maxUsd = (perTurnMicros * 100) / 1_000_000`, where the multiplications happen in integer micros and the division to USD happens once at serialization. The `17` corresponds to a 17-shot perfect win and the `100` corresponds to the shot cap.
+The `estimatedCostRange` fields MUST be computed deterministically from the model's pricing entry. Let `perTurnMicros` equal the sum `floor((estimatedPromptTokens + estimatedImageTokens) * inputMicrosPerMtok / 1_000_000) + floor(estimatedOutputTokensPerShot * outputMicrosPerMtok / 1_000_000)` as defined in the `pricing` capability. The response MUST then satisfy `estimatedCostRange.minUsd = (perTurnMicros * 17) / 1_000_000` and `estimatedCostRange.maxUsd = (perTurnMicros * 100) / 1_000_000`, where the multiplications happen in integer micros and the final division to USD happens once at serialization as floating-point division so decimal values such as `0.119` are preserved. Implementations SHOULD use 64-bit-safe integer arithmetic, arbitrary-precision integers, or explicit upper-bound checks for `perTurnMicros` and the range multiplications to avoid overflow. The `17` corresponds to a 17-shot perfect win and the `100` corresponds to the shot cap.
 
 #### Scenario: Happy fetch returns the typed shape
 
@@ -67,3 +67,17 @@ The `estimatedCostRange` fields MUST be computed deterministically from the mode
 
 - **WHEN** a client sends `GET /api/providers` with `If-None-Match: "stale"`
 - **THEN** the response status is `200` and the body contains the full `ProvidersResponse`
+
+### Requirement: Provider catalog exposes reasoning control policy
+
+Every provider model returned by `GET /api/providers` SHALL include `reasoningMode` with one of the string values `optional`, `forced_on`, or `forced_off`. `optional` means the user can choose the Reasoning checkbox value; forced modes mean the checkbox must be disabled and preset.
+
+#### Scenario: Model response includes reasoningMode
+
+- **WHEN** a client issues `GET /api/providers`
+- **THEN** every returned model contains a valid `reasoningMode` string
+
+#### Scenario: hasReasoning remains compatible
+
+- **WHEN** a model has `reasoningMode === "forced_off"`
+- **THEN** clients can still read `hasReasoning` for compatibility, but MUST use `reasoningMode` to render the checkbox state

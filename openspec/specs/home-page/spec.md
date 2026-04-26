@@ -2,28 +2,9 @@
 
 ## Purpose
 
-Describes the mobile-first home page at `/` that anchors the public product: an inline SVG preview of today's empty board, a primary "Start a run" CTA pointing at `/play`, and a hydrated Solid `Leaderboard` island showing the day's top results and an all-time view. Audience: first-time visitors, returning spectators, and Playwright smoke coverage. The preview never leaks ship positions, never issues a network request for the SVG, and preserves the shared `renderBoardSvg` "no-text-children" invariant by placing axis labels as HTML siblings. Out of scope: provider pricing, run-start flow (lives on `/play`), and any per-run detail (lives on `/runs/:id` and `/runs/:id/replay`).
+Describes the mobile-first home page at `/` that anchors the public product: a primary "Start a run" CTA pointing at `/play` and a hydrated Solid `Leaderboard` island showing the day's top results and an all-time view. Audience: first-time visitors, returning spectators, and Playwright smoke coverage. The home page intentionally omits decorative board previews so first-load attention stays on starting a run and comparing leaderboard cohorts. Out of scope: provider pricing, run-start flow (lives on `/play`), and any per-run detail (lives on `/runs/:id` and `/runs/:id/replay`).
 
 ## Requirements
-
-### Requirement: Home page renders an inline empty-grid preview of today's board
-
-`web/src/pages/index.astro` SHALL render the today's-board preview as an inline 10x10 empty grid. The grid cells MUST be produced by the shared `renderBoardSvg` helper (whose output is a text-less SVG per `shared-contract`). Axis labels (A-J for columns, 1-10 for rows) MUST be rendered as HTML siblings of the SVG (for example `<span>` elements in flanking rows and columns), not as `<text>` elements inside the SVG, so the shared helper's "no `<text>` elements" invariant is preserved. The first-load HTML MUST contain both the SVG element and the label siblings before any client-side hydration. The preview MUST NOT issue any network request and MUST NOT render an `<img>` element pointing at `/api/board`.
-
-#### Scenario: First-load HTML contains the grid SVG plus HTML axis labels before hydration
-
-- **WHEN** a client issues `GET /` and inspects the response body before any JavaScript runs
-- **THEN** the HTML contains an `<svg>` element rendering a 10x10 empty grid AND separate HTML elements (not `<text>` inside the SVG) carrying the axis labels A-J for columns and 1-10 for rows
-
-#### Scenario: SVG element contains no text children
-
-- **WHEN** the inline SVG produced for the preview is inspected
-- **THEN** it contains no `<text>` child element, preserving the shared-contract invariant for `renderBoardSvg`
-
-#### Scenario: No img pointing at /api/board
-
-- **WHEN** the first-load HTML of `/` is inspected
-- **THEN** it contains no `<img>` element whose `src` attribute references `/api/board`
 
 ### Requirement: Home page includes a Start-a-run CTA linking to /play
 
@@ -50,7 +31,7 @@ The home page SHALL mount `web/src/islands/Leaderboard.tsx` with `client:load` s
 
 ### Requirement: Home page layout is a vertical stack at every width
 
-The home page layout SHALL be a vertical stack at every viewport width: header, today's board preview, leaderboard section. On desktop the stack MUST be constrained to a max-width column. No side-by-side layouts and no sticky columns are permitted.
+The home page layout SHALL be a vertical stack at every viewport width: header, start-run CTA, leaderboard section. On desktop the stack MUST be constrained to a max-width column. No side-by-side layouts and no sticky columns are permitted.
 
 #### Scenario: Vertical stack preserved at 375px width
 
@@ -62,11 +43,20 @@ The home page layout SHALL be a vertical stack at every viewport width: header, 
 - **WHEN** the home page is rendered at a viewport width of 1440px
 - **THEN** the three sections remain stacked vertically inside a max-width column
 
-### Requirement: Seed date caption shows today's UTC date
+### Requirement: Home page omits decorative board preview
 
-The today's-board preview SHALL display a caption in the form `Seed <YYYY-MM-DD> UTC` where `<YYYY-MM-DD>` matches the current UTC date at the time of render.
+The home page SHALL NOT render the empty game board preview. The first-load layout MUST focus on product entry and leaderboard information.
 
-#### Scenario: Caption matches UTC date
+#### Scenario: Home page has no board preview
 
-- **WHEN** the home page is rendered on `2026-04-24` UTC
-- **THEN** the caption text contains `2026-04-24` and the literal substring `UTC`
+- **WHEN** a client renders `/`
+- **THEN** the page does not contain the home-page empty board preview or its seed caption
+
+### Requirement: Home leaderboard exposes reasoning controls
+
+The home-page leaderboard UI SHALL expose a Reasoning filter control and a Reasoning column so users can see and filter reasoning-enabled versus reasoning-disabled cohorts.
+
+#### Scenario: Reasoning filter and column are visible
+
+- **WHEN** the leaderboard island is rendered on the home page
+- **THEN** it shows a Reasoning filter control and each row includes a reasoning value column

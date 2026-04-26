@@ -15,16 +15,23 @@ import type {
 // and exclude it from production-facing provider selection and documentation.
 
 const MODELS: readonly ProviderModel[] = [
-  { id: "mock-happy", displayName: "Mock - winning run", hasReasoning: false },
+  {
+    id: "mock-happy",
+    displayName: "Mock - winning run",
+    hasReasoning: false,
+    reasoningMode: "forced_off",
+  },
   {
     id: "mock-misses",
     displayName: "Mock - always misses",
     hasReasoning: false,
+    reasoningMode: "forced_off",
   },
   {
     id: "mock-schema-errors",
     displayName: "Mock - schema errors",
     hasReasoning: false,
+    reasoningMode: "forced_off",
   },
 ];
 

@@ -8,7 +8,7 @@ import { createMockProvider } from "../../src/providers/mock.ts";
 
 const baseInput = {
   apiKey: "k",
-  boardPng: new Uint8Array(),
+  boardText: "",
   shipsRemaining: [],
   systemPrompt: "",
   priorShots: [],

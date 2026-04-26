@@ -1,4 +1,8 @@
-import type { ModelCostEstimate, ProviderCatalogProvider } from "@battleship-arena/shared";
+import type {
+  ModelCostEstimate,
+  ProviderCatalogProvider,
+  ReasoningMode,
+} from "@battleship-arena/shared";
 
 export interface TokenUsage {
   tokensIn: number;
@@ -7,12 +11,13 @@ export interface TokenUsage {
 }
 
 export interface PricingEntry {
-  providerId: "openrouter" | "opencode-go";
+  providerId: "openrouter" | "opencode-go" | "zai";
   providerDisplayName: string;
   modelId: string;
   providerModelId: string;
   displayName: string;
   hasReasoning: boolean;
+  reasoningMode?: ReasoningMode;
   inputMicrosPerMtok: number;
   outputMicrosPerMtok: number;
   estimatedPromptTokens: number;
@@ -26,9 +31,19 @@ export interface PricingEntry {
 export type PricingTable = Record<string, Record<string, PricingEntry>>;
 
 const REVIEWED_AT = "2026-04-24";
+const ZAI_REVIEWED_AT = "2026-04-26";
 const OPENROUTER_SOURCE = "https://openrouter.ai/api/v1/models";
 const OPENCODE_GO_SOURCE = "https://opencode.ai/docs/go/";
+const ZAI_PRICING_SOURCE = "https://docs.z.ai/guides/overview/pricing";
 const OPENCODE_GO_CHAT_ENDPOINT = "https://opencode.ai/zen/go/v1/chat/completions";
+const ZAI_CODING_CHAT_ENDPOINT = "https://api.z.ai/api/coding/paas/v4/chat/completions";
+// To refresh the OpenCode Go model list and per-model request limits, scrape the docs page:
+//   curl -s https://opencode.ai/docs/go > /tmp/go-docs.html
+// Then read the HTML table containing columns Model | requests-per-5h | requests-per-week |
+// requests-per-month. The provider API id (used as `providerModelId`) appears in the same
+// docs page in the section listing model endpoints, e.g. `kimi-k2.6`, `deepseek-v4-flash`.
+// Note: the public endpoint at https://opencode.ai/zen/v1/models lists ZEN-tier (paid)
+// models, NOT Go-tier; do not use it for the Go catalog.
 const ESTIMATED_PROMPT_TOKENS = 1200;
 const ESTIMATED_IMAGE_TOKENS = 800;
 const ESTIMATED_OUTPUT_TOKENS_PER_SHOT = 120;
@@ -82,6 +97,18 @@ const openRouterEntries: PricingEntry[] = [
     hasReasoning: true,
     inputMicrosPerMtok: usdPerMtokToMicros(0.25),
     outputMicrosPerMtok: usdPerMtokToMicros(2),
+    priceSource: OPENROUTER_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+  }),
+  withEstimatorFields({
+    providerId: "openrouter",
+    providerDisplayName: "OpenRouter",
+    modelId: "moonshotai/kimi-k2.6",
+    providerModelId: "moonshotai/kimi-k2.6",
+    displayName: "MoonshotAI: Kimi K2.6",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(0.7448),
+    outputMicrosPerMtok: usdPerMtokToMicros(4.655),
     priceSource: OPENROUTER_SOURCE,
     lastReviewedAt: REVIEWED_AT,
   }),
@@ -218,6 +245,178 @@ const openCodeGoEntries: PricingEntry[] = [
     lastReviewedAt: REVIEWED_AT,
     endpoint: OPENCODE_GO_CHAT_ENDPOINT,
   }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/mimo-v2.5-pro",
+    providerModelId: "mimo-v2.5-pro",
+    displayName: "MiMo-V2.5-Pro",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(1290)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(1290)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/mimo-v2.5",
+    providerModelId: "mimo-v2.5",
+    displayName: "MiMo-V2.5",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(2150)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(2150)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/minimax-m2.7",
+    providerModelId: "minimax-m2.7",
+    displayName: "MiniMax M2.7",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(3400)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(3400)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/minimax-m2.5",
+    providerModelId: "minimax-m2.5",
+    displayName: "MiniMax M2.5",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(6300)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(6300)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/qwen3.6-plus",
+    providerModelId: "qwen3.6-plus",
+    displayName: "Qwen3.6 Plus",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(3300)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(3300)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/qwen3.5-plus",
+    providerModelId: "qwen3.5-plus",
+    displayName: "Qwen3.5 Plus",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(10200)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(10200)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/deepseek-v4-pro",
+    providerModelId: "deepseek-v4-pro",
+    displayName: "DeepSeek V4 Pro",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(1300)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(1300)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "opencode-go",
+    providerDisplayName: "OpenCode Go",
+    modelId: "opencode-go/deepseek-v4-flash",
+    providerModelId: "deepseek-v4-flash",
+    displayName: "DeepSeek V4 Flash",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(7450)),
+    outputMicrosPerMtok: usdPerMtokToMicros(opencodeGoLimitToUsdPerMtok(7450)),
+    priceSource: OPENCODE_GO_SOURCE,
+    lastReviewedAt: REVIEWED_AT,
+    endpoint: OPENCODE_GO_CHAT_ENDPOINT,
+  }),
+];
+
+const zaiEntries: PricingEntry[] = [
+  withEstimatorFields({
+    providerId: "zai",
+    providerDisplayName: "Z.AI",
+    modelId: "zai/glm-5.1",
+    providerModelId: "glm-5.1",
+    displayName: "GLM-5.1",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(1.4),
+    outputMicrosPerMtok: usdPerMtokToMicros(4.4),
+    priceSource: ZAI_PRICING_SOURCE,
+    lastReviewedAt: ZAI_REVIEWED_AT,
+    endpoint: ZAI_CODING_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "zai",
+    providerDisplayName: "Z.AI",
+    modelId: "zai/glm-5",
+    providerModelId: "glm-5",
+    displayName: "GLM-5",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(1),
+    outputMicrosPerMtok: usdPerMtokToMicros(3.2),
+    priceSource: ZAI_PRICING_SOURCE,
+    lastReviewedAt: ZAI_REVIEWED_AT,
+    endpoint: ZAI_CODING_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "zai",
+    providerDisplayName: "Z.AI",
+    modelId: "zai/glm-5-turbo",
+    providerModelId: "glm-5-turbo",
+    displayName: "GLM-5-Turbo",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(1.2),
+    outputMicrosPerMtok: usdPerMtokToMicros(4),
+    priceSource: ZAI_PRICING_SOURCE,
+    lastReviewedAt: ZAI_REVIEWED_AT,
+    endpoint: ZAI_CODING_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "zai",
+    providerDisplayName: "Z.AI",
+    modelId: "zai/glm-4.7",
+    providerModelId: "glm-4.7",
+    displayName: "GLM-4.7",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(0.6),
+    outputMicrosPerMtok: usdPerMtokToMicros(2.2),
+    priceSource: ZAI_PRICING_SOURCE,
+    lastReviewedAt: ZAI_REVIEWED_AT,
+    endpoint: ZAI_CODING_CHAT_ENDPOINT,
+  }),
+  withEstimatorFields({
+    providerId: "zai",
+    providerDisplayName: "Z.AI",
+    modelId: "zai/glm-4.5-air",
+    providerModelId: "glm-4.5-air",
+    displayName: "GLM-4.5-Air",
+    hasReasoning: true,
+    inputMicrosPerMtok: usdPerMtokToMicros(0.2),
+    outputMicrosPerMtok: usdPerMtokToMicros(1.1),
+    priceSource: ZAI_PRICING_SOURCE,
+    lastReviewedAt: ZAI_REVIEWED_AT,
+    endpoint: ZAI_CODING_CHAT_ENDPOINT,
+  }),
 ];
 
 function indexEntries(entries: readonly PricingEntry[]): Record<string, PricingEntry> {
@@ -227,6 +426,7 @@ function indexEntries(entries: readonly PricingEntry[]): Record<string, PricingE
 export const PRICING_TABLE: PricingTable = {
   openrouter: indexEntries(openRouterEntries),
   "opencode-go": indexEntries(openCodeGoEntries),
+  zai: indexEntries(zaiEntries),
 };
 
 export function listProviderPricing(
@@ -254,6 +454,14 @@ export function getPricingEntry(
   table: PricingTable = PRICING_TABLE,
 ): PricingEntry | undefined {
   return table[providerId]?.[modelId];
+}
+
+export function reasoningModeForEntry(entry: PricingEntry): ReasoningMode {
+  if (!entry.hasReasoning) {
+    return "forced_off";
+  }
+
+  return entry.providerId === "openrouter" ? "optional" : "forced_on";
 }
 
 function requirePricingEntry(
@@ -336,6 +544,7 @@ export function listProviderCatalog(
         id: entry.modelId,
         displayName: entry.displayName,
         hasReasoning: entry.hasReasoning,
+        reasoningMode: entry.reasoningMode ?? reasoningModeForEntry(entry),
         pricing: {
           inputUsdPerMtok: entry.inputMicrosPerMtok / 1_000_000,
           outputUsdPerMtok: entry.outputMicrosPerMtok / 1_000_000,

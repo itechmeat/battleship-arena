@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Specifies the two MVP real-provider adapters (`openrouter` and `opencode-go`) and the shared HTTP/error/image-encoding plumbing that hosts them. Audience: adapter authors extending the benchmark to a new provider and the engine layer that consumes the `ProviderAdapter` contract. Scope: conforming to the typed `ProviderCallInput`/`ProviderCallOutput` shapes, applying the spec-section-6.5 retry budget, translating HTTP-client errors into the shared `ProviderError` discriminated union, and guaranteeing the user-supplied API key never appears in returned output, logs, or captured state. Out of scope: framework-level AI SDKs, and the four post-MVP provider slugs (`openai`, `anthropic`, `google`, `zai`).
+Specifies the current real-provider adapters (`openrouter`, `opencode-go`, and `zai`) and the shared HTTP/error plumbing that hosts them. Audience: adapter authors extending the benchmark to a new provider and the engine layer that consumes the `ProviderAdapter` contract. Scope: conforming to the typed `ProviderCallInput`/`ProviderCallOutput` shapes, applying the spec-section-6.5 retry budget, translating HTTP-client errors into the shared `ProviderError` discriminated union, and guaranteeing the user-supplied API key never appears in returned output, logs, or captured state. Out of scope: framework-level AI SDKs, the disabled vision-track image branch, and the post-MVP provider slugs (`openai`, `anthropic`, `google`).
 
 ## Requirements
 
 ### Requirement: ProviderAdapter interface honoured by every real adapter
 
-Every real provider adapter SHALL conform to the `ProviderAdapter` shape exported from `backend/src/providers/types.ts`. Each adapter MUST accept a `ProviderCallInput` (including `seedDate`, `priorShots`, board image, ships-remaining preamble, system prompt, model id, and API key) and MUST return a `ProviderCallOutput` carrying `rawText`, `tokensIn`, `tokensOut`, `reasoningTokens`, `costUsdMicros`, and `durationMs`. Adapters MUST NOT extend the interface with free-form fields; new capabilities belong in the shared types module.
+Every real provider adapter SHALL conform to the `ProviderAdapter` shape exported from `backend/src/providers/types.ts`. Each adapter MUST accept a `ProviderCallInput` (including `seedDate`, `priorShots`, `boardText`, optional `boardPng` reserved for the disabled vision fallback, ships-remaining data, system prompt, model id, consecutive schema-error count, and API key) and MUST return a `ProviderCallOutput` carrying `rawText`, `tokensIn`, `tokensOut`, `reasoningTokens`, `costUsdMicros`, and `durationMs`. Adapters MUST NOT extend the interface with free-form fields; new capabilities belong in the shared types module.
 
 #### Scenario: Happy-path call produces a typed ProviderCallOutput
 
@@ -46,12 +46,12 @@ The shared HTTP client module SHALL apply the `500 ms / 1500 ms / 4500 ms` backo
 
 ### Requirement: OpenRouter adapter targets chat completions with OpenAI-compatible body shape
 
-The OpenRouter adapter SHALL issue a `POST` to the OpenRouter chat-completions endpoint with an OpenAI-compatible JSON body (`model`, `messages`, and image content block). It MUST place the API key in the `Authorization: Bearer <key>` header. It MUST strip any reasoning or thinking blocks from the assistant message before populating `rawText`. It MUST parse `usage.prompt_tokens` and `usage.completion_tokens` into `tokensIn` and `tokensOut`, and `usage.completion_tokens_details.reasoning_tokens` (or the provider's equivalent) into `reasoningTokens` when present.
+The OpenRouter adapter SHALL issue a `POST` to the OpenRouter chat-completions endpoint with an OpenAI-compatible JSON body (`model`, `messages`, `temperature: 0`, `verbosity: "low"`, `max_tokens`, and `response_format: { type: "json_object" }`). The active request MUST send the shared text-board prompt as a plain user message and MUST NOT include an image content block. For reasoning models it MUST include `reasoning: { effort: "minimal", exclude: true }`. It MUST place the API key in the `Authorization: Bearer <key>` header. It MUST strip any reasoning or thinking blocks from the assistant message before populating `rawText`. It MUST parse `usage.prompt_tokens` and `usage.completion_tokens` into `tokensIn` and `tokensOut`, and `usage.completion_tokens_details.reasoning_tokens` (or the provider's equivalent) into `reasoningTokens` when present.
 
 #### Scenario: Request shape and auth header
 
 - **WHEN** the adapter is called against a canned `fetch` and a valid input
-- **THEN** the recorded request URL contains `openrouter.ai/api/v1/chat/completions`, the method is `POST`, the JSON body carries `model` and `messages`, and the `authorization` header equals `Bearer <test-key>` verbatim
+- **THEN** the recorded request URL contains `openrouter.ai/api/v1/chat/completions`, the method is `POST`, the JSON body carries `model`, `messages`, `verbosity: "low"`, and no `image_url` content block, and the `authorization` header equals `Bearer <test-key>` verbatim
 
 #### Scenario: Reasoning stripped from rawText, tokens preserved
 
@@ -60,21 +60,45 @@ The OpenRouter adapter SHALL issue a `POST` to the OpenRouter chat-completions e
 
 ### Requirement: opencode-go adapter targets its resolved upstream endpoint
 
-The opencode-go adapter SHALL issue its request against the upstream endpoint captured at fixture-capture time, using the auth header the upstream documents at that time. It MUST parse the upstream response into the same `ProviderCallOutput` shape, strip reasoning content from `rawText`, and report `tokensIn`, `tokensOut`, and `reasoningTokens` from the upstream `usage` object.
+The opencode-go adapter SHALL issue its request against the endpoint configured by the model's pricing/catalog entry. The default active route is `https://opencode.ai/zen/go/v1/chat/completions`, using the OpenAI-compatible body shape and `Authorization: Bearer <key>` auth expected by OpenCode Go chat completions. The chat-completions route MUST NOT send OpenRouter-specific `reasoning`, `verbosity`, or `response_format` fields. Entries that explicitly opt into `https://opencode.ai/zen/go/v1/messages` MUST use the documented Anthropic-style messages body with `x-api-key` and `anthropic-version`. The adapter MUST parse the upstream response into the same `ProviderCallOutput` shape, preserve empty visible assistant text when token usage is present, and report `tokensIn`, `tokensOut`, and `reasoningTokens` from the upstream `usage` object when available.
 
 #### Scenario: Request shape matches captured fixture
 
-- **WHEN** the adapter is called against the opencode-go happy-path fixture
-- **THEN** the recorded request URL matches the fixture's `assertUrlContains`, the method matches the fixture's `assertMethod`, and the request body satisfies the fixture's deep-partial body assertion
+- **WHEN** the adapter is called against the opencode-go chat-completions route
+- **THEN** the recorded request URL contains `/zen/go/v1/chat/completions`, the method is `POST`, the request body contains the provider model id without the `opencode-go/` prefix, the request uses `Authorization: Bearer <key>`, the body omits `reasoning`, `verbosity`, and `response_format`, and the user message contains the text-board prompt rather than a PNG data URL
+
+#### Scenario: Messages route can be selected by catalog endpoint
+
+- **WHEN** an opencode-go pricing entry's endpoint is the Anthropic-style messages URL
+- **THEN** the adapter sends `x-api-key` plus `anthropic-version`, uses `max_tokens` appropriate for the messages route, and does not send OpenAI `response_format` or `reasoning` fields
 
 #### Scenario: Token counts parsed verbatim
 
 - **WHEN** the upstream returns a valid `usage` object
 - **THEN** `tokensIn`, `tokensOut`, and `reasoningTokens` in the `ProviderCallOutput` equal the values in that `usage` object exactly
 
+#### Scenario: Empty assistant content with usage is preserved for schema-error telemetry
+
+- **WHEN** the upstream returns an otherwise valid response whose assistant text is an empty string and whose usage block is present
+- **THEN** the adapter returns `rawText === ""` with the reported token counts instead of throwing, so the engine can classify the turn as a model `schema_error`
+
+### Requirement: zai adapter targets the Z.AI Coding Plan chat completions endpoint
+
+The zai adapter SHALL issue a `POST` to `https://api.z.ai/api/coding/paas/v4/chat/completions` using an OpenAI-compatible JSON body (`model`, `messages`, `temperature: 0`, `max_tokens`, and `response_format: { type: "json_object" }`). The adapter MUST strip the local `zai/` prefix before sending `model` upstream. For GLM reasoning models it MUST send `thinking: { type: "enabled", clear_thinking: true }` and MUST NOT send OpenRouter-style `reasoning` or `verbosity` fields. It MUST place the API key in the `Authorization: Bearer <key>` header. It MUST parse `usage.prompt_tokens` and `usage.completion_tokens` into `tokensIn` and `tokensOut`, preserve empty visible assistant text when token usage is present, and report `reasoningTokens` only if the upstream reports a numeric reasoning-token field.
+
+#### Scenario: Request shape enables GLM thinking
+
+- **WHEN** the adapter is called against a canned `fetch` and a valid `zai/glm-5.1` input
+- **THEN** the recorded request URL contains `/api/coding/paas/v4/chat/completions`, the JSON body carries `model: "glm-5.1"`, `thinking.type === "enabled"`, `response_format.type === "json_object"`, and no `reasoning` or `verbosity` field
+
+#### Scenario: Empty assistant content with usage is preserved for schema-error telemetry
+
+- **WHEN** Z.AI returns a valid response whose `choices[0].message.content` is an empty string and whose usage block is present
+- **THEN** the adapter returns `rawText === ""` with the reported token counts instead of throwing, so the engine can classify the turn as a model `schema_error`
+
 ### Requirement: Adapters surface a ProviderError discriminated union on failure
 
-Each real adapter SHALL throw `ProviderError` (as defined in `shared-contract`) with `kind: "transient"` when the HTTP client raises `TransientFailure` and `kind: "unreachable"` when the HTTP client raises `NonRetriable4xx` or the upstream is network-unreachable. The thrown value's `cause` MUST be a non-empty string (matching the `cause: string` field in the shared `ProviderError` type) that describes the originating failure well enough for an operator to diagnose it (for example: `"503 upstream"`, `"timeout after 4500ms"`, `"401 unauthorized"`). For `kind: "unreachable"` the thrown value MUST also carry `status: number` equal to the upstream HTTP status. The adapter MUST NOT embed a live `Response` object, a `Headers` instance, the original thrown `Error`, or any non-string structure into `cause`. The engine branches on `kind` per `docs/spec.md` section 6.5: `transient` becomes a `schema_error` turn; `unreachable` becomes the `llm_unreachable` terminal outcome.
+Each real adapter SHALL throw `ProviderError` (as defined in `shared-contract`) with `kind: "transient"` when the HTTP client raises `TransientFailure` and `kind: "unreachable"` when the HTTP client raises `NonRetriable4xx` or the upstream is network-unreachable. The thrown value's `cause` MUST be a non-empty string (matching the `cause: string` field in the shared `ProviderError` type) that describes the originating failure well enough for an operator to diagnose it (for example: `"503 upstream"`, `"timeout after 4500ms"`, `"401 unauthorized"`). For `kind: "unreachable"` the thrown value MUST also carry `status: number` equal to the upstream HTTP status. The adapter MUST NOT embed a live `Response` object, a `Headers` instance, the original thrown `Error`, or any non-string structure into `cause`. The engine branches on `kind` per `docs/spec.md` section 6.5: ordinary `transient` errors become `schema_error` turns, the engine's own per-turn timeout becomes a `timeout` turn, and `unreachable` becomes the `llm_unreachable` terminal outcome.
 
 #### Scenario: TransientFailure becomes ProviderError transient with a descriptive string cause
 
@@ -126,7 +150,7 @@ When a real adapter receives an HTTP `200` response whose body cannot be parsed 
 #### Scenario: Production registry contains real adapters only in the picker surface
 
 - **WHEN** the production registry is constructed and `listPickerProviders()` (or equivalent) is queried
-- **THEN** the returned set contains `openrouter` and `opencode-go` and does not contain `mock`
+- **THEN** the returned set contains `openrouter`, `opencode-go`, and `zai`, and does not contain `mock`
 
 #### Scenario: Test registry can include the mock
 

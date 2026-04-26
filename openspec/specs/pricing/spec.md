@@ -20,6 +20,11 @@ TBD - created by archiving change s3-real-providers-pricing-leaderboard-replays.
 - **WHEN** the table contains `(openrouter, shared-id)` and `(opencode-go, shared-id)` and `getPricingEntry("opencode-go", "shared-id")` is called
 - **THEN** the returned entry's `providerId` equals `"opencode-go"`, not `"openrouter"`
 
+#### Scenario: Direct Z.AI GLM pricing uses official token rates
+
+- **WHEN** `getPricingEntry("zai", "zai/glm-5.1")` is called
+- **THEN** the returned entry's `providerId` equals `"zai"`, `providerModelId` equals `"glm-5.1"`, and its input/output rates match the current official Z.AI pricing table captured in `priceSource`
+
 ### Requirement: computeCostMicros applies floor rounding separately to input and output
 
 `computeCostMicros(entry, tokensIn, tokensOut)` SHALL return `floor(tokensIn * entry.inputMicrosPerMtok / 1_000_000) + floor(tokensOut * entry.outputMicrosPerMtok / 1_000_000)` as an integer. Flooring MUST be applied to the input and output halves independently before addition. The function MUST NOT add a separate term for reasoning tokens; reasoning output is already included in the provider's reported `tokensOut`.

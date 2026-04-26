@@ -8,6 +8,9 @@ export const runs = sqliteTable(
     providerId: text("provider_id").notNull(),
     modelId: text("model_id").notNull(),
     displayName: text("display_name").notNull(),
+    reasoningEnabled: integer("reasoning_enabled", {
+      mode: "boolean",
+    }).notNull(),
     startedAt: integer("started_at").notNull(),
     endedAt: integer("ended_at"),
     outcome: text("outcome"),

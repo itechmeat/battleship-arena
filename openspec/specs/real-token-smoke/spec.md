@@ -22,7 +22,7 @@ Defines `backend/scripts/smoke-real-keys.ts`, the operator-run CLI that exercise
 
 ### Requirement: CLI supports the flags documented in the runbook
 
-The script SHALL accept the following flags: `--provider <id>`, `--all`, `--key <value>`, `--openrouter-key <value>`, `--opencode-go-key <value>`, `--model <id>`, `--turns <n>`, `--budget <usd>`, `--dry-run`, `--force-prod`. Missing required flags MUST produce an exit code of `2` with a usage message printed to stderr.
+The script SHALL accept the following flags: `--provider <id>`, `--all`, `--key <value>`, `--openrouter-key <value>`, `--opencode-go-key <value>`, `--zai-key <value>`, `--model <id>`, `--turns <n>`, `--budget <usd>`, `--dry-run`, `--force-prod`. Missing required flags MUST produce an exit code of `2` with a usage message printed to stderr.
 
 #### Scenario: Missing --provider and --all rejects with exit code 2
 
@@ -31,8 +31,8 @@ The script SHALL accept the following flags: `--provider <id>`, `--all`, `--key 
 
 #### Scenario: Per-provider key flag overrides --key for --all
 
-- **WHEN** the script is invoked with `--all --openrouter-key K1 --opencode-go-key K2`
-- **THEN** the openrouter adapter sees `K1` in its auth header and the opencode-go adapter sees `K2`
+- **WHEN** the script is invoked with `--all --openrouter-key K1 --opencode-go-key K2 --zai-key K3`
+- **THEN** the openrouter adapter sees `K1` in its auth header, the opencode-go adapter sees `K2`, and the zai adapter sees `K3`
 
 ### Requirement: Script parses each response, resolves the shot, and advances game state
 

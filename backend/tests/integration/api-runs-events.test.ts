@@ -71,6 +71,7 @@ describe("GET /api/runs/:id/events", () => {
         providerId: "mock",
         modelId: "mock-happy",
         apiKey: "test-key",
+        reasoningEnabled: false,
         clientSession: "session-1",
         seedDate: "2026-04-21",
       });
@@ -94,6 +95,7 @@ describe("GET /api/runs/:id/events", () => {
         providerId: "mock",
         modelId: "mock-happy",
         displayName: "Mock happy",
+        reasoningEnabled: false,
         startedAt: 100,
         clientSession: "session-1",
         budgetUsdMicros: null,
@@ -198,6 +200,7 @@ describe("GET /api/runs/:id/events", () => {
         providerId: "mock",
         modelId: "mock-schema-errors",
         apiKey: "test-key",
+        reasoningEnabled: false,
         clientSession: "session-1",
         seedDate: "2026-04-21",
       });

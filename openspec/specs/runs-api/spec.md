@@ -114,7 +114,7 @@ The backend SHALL expose `POST /api/runs/:id/abort` that, on an active run, call
 
 ### Requirement: GET /api/runs/:id/events (SSE) with Last-Event-ID resume
 
-The backend SHALL expose `GET /api/runs/:id/events` as a Server-Sent Events stream whose `Content-Type` is `text/event-stream`. For an active run the handler MUST: (a) resolve `Last-Event-ID` from the header of that name or the `lastEventId` query parameter (header takes precedence); (b) replay ring entries whose `id > Last-Event-ID` when the requested id is within the ring horizon; (c) subscribe to live events for the remainder of the run; (d) emit a `:heartbeat` comment line every `SSE_HEARTBEAT_MS` (25_000) ms to keep intermediary proxies from idling the connection; (e) unsubscribe and clear the heartbeat on client disconnect. When the requested `Last-Event-ID` is older than the ring horizon, the handler MUST emit exactly one `event: resync` event and close. For a run that has no active handle but has a persisted terminal outcome, the handler MUST synthesize the full replay (`event: open`, one `event: shot` per persisted `run_shots` row in ascending idx, `event: outcome`) with event ids re-assigned as `0, 1, 2, ...` within the synthesized stream, and close. For an unknown id the handler MUST emit exactly one `event: resync` event and close.
+The backend SHALL expose `GET /api/runs/:id/events` as a Server-Sent Events stream whose `Content-Type` is `text/event-stream`. For an active run the handler MUST: (a) resolve `Last-Event-ID` from the header of that name or the `lastEventId` query parameter (header takes precedence); (b) replay ring entries whose `id > Last-Event-ID` when the requested id is within the ring horizon; (c) subscribe to live events for the remainder of the run; (d) emit a `:heartbeat` comment line every `SSE_HEARTBEAT_MS` (25_000) ms to keep intermediary proxies from idling the connection; (e) unsubscribe and clear the heartbeat on client disconnect. Shot events emitted by the active run MAY include per-shot token, cost, duration, and timestamp fields. When the requested `Last-Event-ID` is older than the ring horizon, the handler MUST emit exactly one `event: resync` event and close. For a run that has no active handle but has a persisted terminal outcome, the handler MUST synthesize the full replay (`event: open`, one `event: shot` per persisted `run_shots` row in ascending idx including saved token/cost/duration/timestamp fields, `event: outcome`) with event ids re-assigned as `0, 1, 2, ...` within the synthesized stream, and close. For an unknown id the handler MUST emit exactly one `event: resync` event and close.
 
 #### Scenario: Active run delivers open + shots + outcome in order
 
@@ -135,6 +135,11 @@ The backend SHALL expose `GET /api/runs/:id/events` as a Server-Sent Events stre
 
 - **WHEN** a client subscribes to `/api/runs/<terminal-id>/events` after the run has finished with `won`
 - **THEN** the stream contains `event: open`, at least one `event: shot` whose count equals the number of persisted `run_shots` rows, and exactly one `event: outcome` carrying `outcome=won`, followed by stream close; the stream contains no `event: resync`
+
+#### Scenario: Terminal replay preserves persisted shot telemetry
+
+- **WHEN** a terminal run has persisted `tokens_in`, `tokens_out`, `reasoning_tokens`, `cost_usd_micros`, `duration_ms`, and `created_at` values on `run_shots`
+- **THEN** the synthesized `event: shot` payloads include the corresponding camelCase telemetry fields so a late-opening live page renders the same resource metrics as an originally connected page
 
 #### Scenario: Unknown id emits a single resync
 
@@ -203,3 +208,36 @@ The backend's HTTP API under `/api` SHALL additionally expose `GET /api/openapi.
 
 - **WHEN** a reader opens `docs/spec.md` section 5.2
 - **THEN** it contains bullet points for both `GET /api/openapi.json` (cacheable raw spec) and `GET /api/docs` (interactive Swagger UI)
+
+### Requirement: POST /api/runs accepts reasoning state
+
+`POST /api/runs` SHALL accept an optional boolean `reasoningEnabled` field. When omitted, the backend MUST default from the selected model's reasoning policy. When present for an optional model, the backend MUST persist the submitted value. When present for a forced model, the backend MUST persist the forced value.
+
+#### Scenario: Optional reasoning value is accepted
+
+- **WHEN** a client POSTs a valid run body with `providerId: "openrouter"`, `modelId: "openai/gpt-5-nano"`, and `reasoningEnabled: false` for that optional model
+- **THEN** the response is successful and the inserted run row stores `reasoning_enabled = false`
+
+#### Scenario: Omitted reasoningEnabled defaults from model policy
+
+- **WHEN** a client POSTs a valid run body without `reasoningEnabled` for a model whose resolved policy defaults reasoning on
+- **THEN** the response is successful and the inserted run row stores `reasoning_enabled = true`
+
+#### Scenario: Forced model with conflicting user value persists forced value
+
+- **WHEN** a client POSTs `reasoningEnabled: false` for a `forced_on` model or `reasoningEnabled: true` for a `forced_off` model
+- **THEN** the response is successful and the inserted run row stores the forced model value instead of the submitted conflicting value
+
+#### Scenario: Non-boolean reasoning value rejects
+
+- **WHEN** a client POSTs `reasoningEnabled: "true"`
+- **THEN** the response status is 400 and the error detail field is `reasoningEnabled`
+
+### Requirement: Run metadata exposes reasoning state
+
+`GET /api/runs/:id` SHALL include `reasoningEnabled` in the returned `RunMeta` payload.
+
+#### Scenario: Known run returns reasoning state
+
+- **WHEN** a client POSTs a run with `reasoningEnabled: false` and then GETs `/api/runs/<valid-id>`
+- **THEN** the response body includes `reasoningEnabled: false` matching the persisted row value

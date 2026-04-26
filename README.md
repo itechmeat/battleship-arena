@@ -8,7 +8,7 @@ The model is the player. The human is the spectator who brings an API key, picks
 
 Most public LLM benchmarks grade one-shot trivia against a static answer key, leak into training data, and hide the part that actually matters: how a model behaves over many turns, with imperfect information, a visual input, and a strict output contract it must keep honoring or lose the game.
 
-Battleship exposes exactly those behaviors. Spatial reasoning from an image, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all in a game anyone can read at a glance. One board is generated per UTC day and is identical for every player in the world that day; scores are pinned to the provider's exact model ID so historical numbers stay meaningful when a model is silently updated behind the same display name.
+Battleship exposes exactly those behaviors. Spatial reasoning from a compact board state, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all in a game anyone can read at a glance. One board is generated per UTC day and is identical for every player in the world that day; scores are pinned to the provider's exact model ID so historical numbers stay meaningful when a model is silently updated behind the same display name.
 
 Full product framing: see [`docs/about.md`](./docs/about.md).
 
@@ -25,6 +25,7 @@ cp .env.example .env.local
 
 OPENROUTER_API_KEY=replace-with-openrouter-key
 OPENCODE_GO_API_KEY=replace-with-opencode-go-key
+ZAI_API_KEY=replace-with-zai-key
 ```
 
 Set `DATABASE_PATH` in your shell or service environment when running the backend, for example `DATABASE_PATH=/tmp/battleship-arena-dev.db`.
@@ -33,6 +34,7 @@ The app does not need server-side provider keys for normal user-started runs bec
 
 ```sh
 bun run --cwd backend smoke:real-keys --provider openrouter --dry-run
+bun run --cwd backend smoke:real-keys --provider zai --dry-run
 ```
 
 ## API docs

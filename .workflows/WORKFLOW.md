@@ -2,7 +2,7 @@
 
 ## Init story
 
-- [x] 🦊 Claude Code
+- [ ] 🦊 Claude Code
 
 Let's run a brainstorm for implementing story S3 from the plan in docs/plan.md.
 The project information is described in sufficient detail in the documents inside the docs folder.
@@ -13,19 +13,19 @@ ultrathink
 
 ## Review
 
-- [x] 🤖 Codex
+- [ ] 🤖 Codex
 
 docs/superpowers/plans/2026-04-24-s3-real-providers-pricing-leaderboard-replays.md
 docs/superpowers/specs/2026-04-24-s3-real-providers-pricing-leaderboard-replays-design.md
 Review this plan; if you have criticism or improvement ideas - tell me.
 Do not propose fixes and do not fix anything yourself, your job is review only.
 
-- [x] 🦊 Claude Code
+- [ ] 🦊 Claude Code
 
 I have a review of our brainstorm. Inside curly braces I wrote my comments on how to treat each review item; where there are no braces - decide yourself whether to apply changes or ignore them. If you have questions - ask; if not - apply changes wherever you find it necessary. The reviewer does not know what you and I discussed, they only had access to the documents, so the decision to follow the reviewer's recommendations or not is yours.
 ultrathink
 
-- [x] 🦊 Claude Code
+- [ ] 🦊 Claude Code
 
 docs/superpowers/plans/2026-04-24-s3-real-providers-pricing-leaderboard-replays.md
 docs/superpowers/specs/2026-04-24-s3-real-providers-pricing-leaderboard-replays-design.md
@@ -34,19 +34,19 @@ Produce all artifacts autonomously.
 If needed, spawn a dedicated agent per file to speed things up.
 ultrathink
 
-- [x] 🤖 Codex
+- [ ] 🤖 Codex
 
 Review the current openspec plan for the feature.
 This refers only to the contents of the openspec folder, nothing else.
 
-- [x] 🦊 Claude Code
+- [ ] 🦊 Claude Code
 
 I have a review of the current openspec change; the decision to follow the reviewer's recommendations or not is yours.
 ultrathink
 
 ## Implement
 
-- [x] 🤖 Codex
+- [ ] 🤖 Codex
 
 Start implementing the current openspec change following the openspec workflow.
 Work autonomously: you have all the documentation, so do not ask me about details. Your job is to implement the feature end-to-end.
@@ -65,7 +65,6 @@ When done, run `make fix` and make sure every issue is resolved; fix anything le
 Use superpowers to review the implementation of the current openspec change.
 If the diff is large, you may split it across several sub-agents.
 Changing code is forbidden - I expect review only!
-Also, extra work was done beyond what was planned - it must be covered too.
 ultrathink
 
 - [x] 🤖 Codex
@@ -73,9 +72,9 @@ ultrathink
 I have a review of the implementation of the current openspec change; the decision to follow the reviewer's recommendations or not is yours.
 When done, run `make fix` and make sure every issue is resolved; fix anything left manually.
 
-- [x] 🦊 Claude Code
+- [-] 🦊 Claude Code
 
-Archive all current openspec changes.
+Archive the current openspec change.
 If needed, without asking me, sync delta specs into main specs.
 At the end, do not forget to propose a branch name and a commit message, using the commits skill without exception. Do not forget about this!
 ultrathink

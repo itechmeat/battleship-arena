@@ -65,12 +65,17 @@ The shared package SHALL export a constant `BOARD_SIZE` with value `10`, a fleet
 
 ### Requirement: parseShot validator with discriminated result
 
-The shared package SHALL export a function `parseShot(rawText)` that accepts a single string and returns a discriminated union whose `kind` field is one of three literals: `ok`, `schema_error`, or `invalid_coordinate`. The `ok` variant carries the parsed shot with integer `row`, integer `col`, and an optional `reasoning` string that is present only when the input JSON object contained a `reasoning` property whose value is a string. The `schema_error` variant MUST be returned when the input is not valid JSON, is not a JSON object, is a JSON array, is a JSON `null`, lacks a `row` integer property, lacks a `col` integer property, has a non-integer `row` or `col` (including string, float, boolean, or `null`), or has a `reasoning` property that is present and not a string. The `invalid_coordinate` variant MUST be returned when `row` and `col` are both integers but at least one falls outside the half-open range `[0, BOARD_SIZE)`; the variant MUST carry the parsed `row` and `col` for logging. Extra top-level keys other than `row`, `col`, and `reasoning` MUST NOT cause a `schema_error`; they are silently dropped.
+The shared package SHALL export a function `parseShot(rawText)` that accepts a single string and returns a discriminated union whose `kind` field is one of three literals: `ok`, `schema_error`, or `invalid_coordinate`. The canonical `ok` input shape is `{ "cell": "A1" }`, where `cell` is a column letter `A` through `J` plus a row number `1` through `10`; optional zero padding (`A01`) MUST be accepted. The legacy `{ "row": 0, "col": 0 }` shape MUST also be accepted for older adapters and fixtures. The `ok` variant carries the parsed shot with integer `row`, integer `col`, and an optional `reasoning` string that is present only when the input JSON object contained a `reasoning` property whose value is a string. The `schema_error` variant MUST be returned when the input is not valid JSON, is not a JSON object, is a JSON array, is a JSON `null`, has an invalid `cell`, lacks both a valid `cell` and valid integer `row`/`col`, has non-integer legacy `row` or `col`, or has a `reasoning` property that is present and not a string. The `invalid_coordinate` variant MUST be returned when legacy `row` and `col` are both integers but at least one falls outside the half-open range `[0, BOARD_SIZE)`; the variant MUST carry the parsed `row` and `col` for logging. Extra top-level keys other than `cell`, `row`, `col`, and `reasoning` MUST NOT cause a `schema_error`; they are silently dropped.
 
 #### Scenario: Valid in-range shot with no reasoning
 
 - **WHEN** `parseShot` is called with the string `{"row":3,"col":5}`
 - **THEN** it returns `kind: "ok"` with `shot.row = 3`, `shot.col = 5`, and no `reasoning` property
+
+#### Scenario: Valid cell notation with optional zero-padded rows
+
+- **WHEN** `parseShot` is called with the string `{"cell":"F04"}` or `{"cell":"J10"}`
+- **THEN** it returns `kind: "ok"` with zero-based numeric `row` and `col` values matching those cells
 
 #### Scenario: Valid in-range shot with reasoning
 
@@ -87,7 +92,7 @@ The shared package SHALL export a function `parseShot(rawText)` that accepts a s
 - **WHEN** `parseShot` is called with a JSON array, a JSON `null`, a JSON string, or a JSON number
 - **THEN** it returns `kind: "schema_error"`
 
-#### Scenario: Missing row or col is a schema_error
+#### Scenario: Missing cell and row/col is a schema_error
 
 - **WHEN** `parseShot` is called with `{"row":3}` or `{"col":5}`
 - **THEN** it returns `kind: "schema_error"`
@@ -175,7 +180,7 @@ The shared package SHALL export `CellState` as a union of exactly the string lit
 
 ### Requirement: RunMeta, RunShotRow, and StartRunInput types
 
-The shared package SHALL export `RunMeta`, `RunShotRow`, and `StartRunInput` TypeScript interfaces matching the public wire shape returned by the runs API. `RunMeta` MUST mirror the `runs` row minus `client_session` and MUST carry a nullable `outcome` narrowed to the `Outcome` union. `RunShotRow` MUST mirror the `run_shots` row with `result` narrowed to the union `"hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate"`. `StartRunInput` MUST carry `providerId`, `modelId`, `apiKey`, optional `budgetUsd`, `clientSession`, and `seedDate`.
+The shared package SHALL export `RunMeta`, `RunShotRow`, and `StartRunInput` TypeScript interfaces matching the public wire shape returned by the runs API. `RunMeta` MUST mirror the `runs` row minus `client_session`, MUST carry `reasoningEnabled: boolean`, and MUST carry a nullable `outcome` narrowed to the `Outcome` union. `RunShotRow` MUST mirror the `run_shots` row with `result` narrowed to the union `"hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate" | "timeout"`. `StartRunInput` MUST carry `providerId`, `modelId`, `apiKey`, `reasoningEnabled: boolean`, optional `budgetUsd`, `clientSession`, and `seedDate`.
 
 #### Scenario: RunMeta omits client_session
 
@@ -185,15 +190,20 @@ The shared package SHALL export `RunMeta`, `RunShotRow`, and `StartRunInput` Typ
 #### Scenario: RunShotRow.result is a closed union
 
 - **WHEN** a consumer declares a value of type `RunShotRow`
-- **THEN** assigning `result` to any string outside `"hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate"` fails TypeScript compilation
+- **THEN** assigning `result` to any string outside `"hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate" | "timeout"` fails TypeScript compilation
 
 ### Requirement: SSE event union with discriminator guard
 
-The shared package SHALL export an `SseEvent` discriminated union with four variants keyed on `kind`: `"open"`, `"shot"`, `"resync"`, `"outcome"`. Every variant MUST carry a numeric `id`. The `shot` variant MUST carry `idx`, nullable `row` and `col`, a `result` drawn from `ShotResult`, and a nullable `reasoning`. The `open` variant MUST carry `runId`, `startedAt`, `seedDate`. The `outcome` variant MUST carry `outcome`, `shotsFired`, `hits`, `schemaErrors`, `invalidCoordinates`, `endedAt`. The `"open"` variant is a custom server-emitted SSE payload event; consumers MUST NOT confuse it with the browser's native `EventSource` connection `open` event, which carries no JSON payload. A runtime guard `isSseEvent(value)` MUST narrow `unknown` to `SseEvent` by requiring a numeric `id` and a `kind` drawn from the four permitted values.
+The shared package SHALL export an `SseEvent` discriminated union with four variants keyed on `kind`: `"open"`, `"shot"`, `"resync"`, `"outcome"`. Every variant MUST carry a numeric `id`. The `shot` variant MUST carry `idx`, nullable `row` and `col`, a `result` drawn from `ShotResult`, and a nullable `reasoning`; it MAY also carry finite numeric `tokensIn`, `tokensOut`, `reasoningTokens`, `costUsdMicros`, `durationMs`, and `createdAt` fields, with `reasoningTokens` also allowed to be `null`. The `open` variant MUST carry `runId`, `startedAt`, `seedDate`. The `outcome` variant MUST carry `outcome`, `shotsFired`, `hits`, `schemaErrors`, `invalidCoordinates`, `endedAt`. The `"open"` variant is a custom server-emitted SSE payload event; consumers MUST NOT confuse it with the browser's native `EventSource` connection `open` event, which carries no JSON payload. A runtime guard `isSseEvent(value)` MUST narrow `unknown` to `SseEvent` by requiring a numeric `id` and a `kind` drawn from the four permitted values and by validating optional shot telemetry when present.
 
 #### Scenario: Guard accepts a well-shaped shot event
 
 - **WHEN** `isSseEvent` is called with `{ kind: "shot", id: 1, idx: 0, row: 0, col: 0, result: "miss", reasoning: null }`
+- **THEN** it returns `true` and narrows the argument
+
+#### Scenario: Guard accepts timeout shot and optional telemetry
+
+- **WHEN** `isSseEvent` is called with a `shot` event whose `result` is `"timeout"` and whose telemetry fields are finite numbers or `null` for `reasoningTokens`
 - **THEN** it returns `true` and narrows the argument
 
 #### Scenario: Guard rejects unknown kind
@@ -208,7 +218,7 @@ The shared package SHALL export an `SseEvent` discriminated union with four vari
 
 ### Requirement: Shared SVG board template for server and client
 
-The shared package SHALL export a pure function `renderBoardSvg(view: BoardView): string` that returns a deterministic SVG string with a fixed viewBox `0 0 640 640` (64px per cell), no `<text>` elements, and closed-geometry markers for each cell state. This same function MUST be imported by both the backend PNG renderer and the web `BoardView` island so the model-facing and user-facing board renderings are byte-equivalent (modulo the downstream PNG vs DOM delivery).
+The shared package SHALL export a pure function `renderBoardSvg(view: BoardView): string` that returns a deterministic SVG string with a fixed viewBox `0 0 640 640` (64px per cell), no `<text>` elements, and closed-geometry markers for each cell state. This same function MUST be imported by both the backend PNG renderer and the web `BoardView` island so the user-facing board and public PNG preview render consistently (modulo the downstream PNG vs DOM delivery).
 
 #### Scenario: Output is deterministic
 
@@ -245,7 +255,7 @@ The `@battleship-arena/shared` package SHALL export a `ProviderError` type as a 
 
 ### Requirement: ProvidersResponse wire shape
 
-The shared package SHALL export a `ProvidersResponse` TypeScript type along with its nested `ProvidersResponseProvider` and `ProvidersResponseModel` types describing the JSON body of `GET /api/providers`. `ProvidersResponse` MUST be the shape `{ providers: readonly ProvidersResponseProvider[] }`. `ProvidersResponseProvider` MUST carry `id: string`, `displayName: string`, and `models: readonly ProvidersResponseModel[]`. `ProvidersResponseModel` MUST carry `id: string`, `displayName: string`, `hasReasoning: boolean`, `pricing: { inputUsdPerMtok: number; outputUsdPerMtok: number }`, `estimatedPromptTokens: number`, `estimatedImageTokens: number`, `estimatedOutputTokensPerShot: number`, `estimatedCostRange: { minUsd: number; maxUsd: number }`, `priceSource: string`, and `lastReviewedAt: string`. The shape MUST round-trip losslessly through `JSON.stringify` and `JSON.parse`.
+The shared package SHALL export a `ProvidersResponse` TypeScript type along with its nested `ProvidersResponseProvider` and `ProvidersResponseModel` types describing the JSON body of `GET /api/providers`. `ProvidersResponse` MUST be the shape `{ providers: readonly ProvidersResponseProvider[] }`. `ProvidersResponseProvider` MUST carry `id: string`, `displayName: string`, and `models: readonly ProvidersResponseModel[]`. `ProvidersResponseModel` MUST carry `id: string`, `displayName: string`, `hasReasoning: boolean`, `reasoningMode: "optional" | "forced_on" | "forced_off"`, `pricing: { inputUsdPerMtok: number; outputUsdPerMtok: number }`, `estimatedPromptTokens: number`, `estimatedImageTokens: number`, `estimatedOutputTokensPerShot: number`, `estimatedCostRange: { minUsd: number; maxUsd: number }`, `priceSource: string`, and `lastReviewedAt: string`. The shape MUST round-trip losslessly through `JSON.stringify` and `JSON.parse`.
 
 #### Scenario: Shape round-trips through JSON serialization
 
@@ -259,7 +269,7 @@ The shared package SHALL export a `ProvidersResponse` TypeScript type along with
 
 ### Requirement: LeaderboardResponse wire shape
 
-The shared package SHALL export a `LeaderboardResponse` TypeScript type along with its nested `LeaderboardRow` type describing the JSON body of `GET /api/leaderboard`. `LeaderboardResponse` MUST carry `scope: "today" | "all"`, `seedDate: string | null`, and `rows: readonly LeaderboardRow[]`. `LeaderboardRow` MUST carry `rank: number`, `providerId: string`, `modelId: string`, `displayName: string`, `shotsToWin: number`, `runsCount: number`, and `bestRunId: string | null`. The `shotsToWin` field MUST be typed as `number` so the all-time scope can carry a fractional median. The `bestRunId` field MUST be nullable so the all-time scope rows (which represent a median, not a single run) can omit a replay link.
+The shared package SHALL export a `LeaderboardResponse` TypeScript type along with its nested `LeaderboardRow` type describing the JSON body of `GET /api/leaderboard`. `LeaderboardResponse` MUST carry `scope: "today" | "all"`, `seedDate: string | null`, and `rows: readonly LeaderboardRow[]`. `LeaderboardRow` MUST carry `rank: number`, `providerId: string`, `modelId: string`, `displayName: string`, `reasoningEnabled: boolean`, `shotsToWin: number`, `runsCount: number`, and `bestRunId: string | null`. The `shotsToWin` field MUST be typed as `number` so the all-time scope can carry a fractional median. The `bestRunId` field MUST be nullable so the all-time scope rows (which represent a median, not a single run) can omit a replay link.
 
 #### Scenario: Today row includes bestRunId
 
@@ -270,3 +280,27 @@ The shared package SHALL export a `LeaderboardResponse` TypeScript type along wi
 
 - **WHEN** a `LeaderboardResponse` value is constructed with `scope: "all"` and a row carrying `bestRunId: null` and fractional `shotsToWin: 22.5`
 - **THEN** the value type-checks as `LeaderboardResponse` without any compiler error on the `null` or the non-integer number
+
+### Requirement: Shared contracts expose reasoning fields
+
+The shared package SHALL expose `reasoningEnabled: boolean` on `RunMeta`, `StartRunInput`, and `LeaderboardRow`, and `reasoningMode: "optional" | "forced_on" | "forced_off"` on `ProvidersResponseModel`.
+
+#### Scenario: RunMeta includes reasoningEnabled
+
+- **WHEN** a consumer declares a `RunMeta` value
+- **THEN** TypeScript requires a boolean `reasoningEnabled` field
+
+#### Scenario: StartRunInput accepts reasoningEnabled
+
+- **WHEN** a consumer calls the typed `startRun` helper with `reasoningEnabled: true`
+- **THEN** the value satisfies `StartRunInput`
+
+#### Scenario: Provider model includes reasoningMode
+
+- **WHEN** a consumer declares a `ProvidersResponseModel`
+- **THEN** TypeScript requires `reasoningMode: "optional" | "forced_on" | "forced_off"`
+
+#### Scenario: LeaderboardRow includes reasoningEnabled
+
+- **WHEN** a consumer declares a `LeaderboardRow`
+- **THEN** TypeScript requires a boolean `reasoningEnabled` field

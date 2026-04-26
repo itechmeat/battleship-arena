@@ -4,16 +4,18 @@ import { getPricingEntry } from "../src/pricing/catalog.ts";
 import { sanitizeProviderCause } from "../src/providers/errors.ts";
 import { createOpenCodeGoAdapter } from "../src/providers/opencode-go.ts";
 import { createOpenRouterAdapter } from "../src/providers/openrouter.ts";
+import { createZaiAdapter } from "../src/providers/zai.ts";
 import type { ProviderAdapter } from "../src/providers/types.ts";
 import { runEngine } from "../src/runs/engine.ts";
 
-type ProviderId = "openrouter" | "opencode-go";
+type ProviderId = "openrouter" | "opencode-go" | "zai";
 
 interface SmokeOptions {
   providers: ProviderId[];
   key?: string;
   openrouterKey?: string;
   opencodeGoKey?: string;
+  zaiKey?: string;
   model?: string;
   turns: number;
   budgetUsd?: number;
@@ -34,11 +36,13 @@ interface SmokeSummary {
 const DEFAULT_MODELS: Record<ProviderId, string> = {
   openrouter: "openai/gpt-5-nano",
   "opencode-go": "opencode-go/glm-5.1",
+  zai: "zai/glm-5.1",
 };
 
 const DEFAULT_ENDPOINTS: Record<ProviderId, string> = {
   openrouter: "https://openrouter.ai/api/v1/chat/completions",
   "opencode-go": "https://opencode.ai/zen/go/v1/chat/completions",
+  zai: "https://api.z.ai/api/coding/paas/v4/chat/completions",
 };
 
 class UsageError extends Error {
@@ -50,12 +54,13 @@ class UsageError extends Error {
 
 function usage(): string {
   return [
-    "Usage: bun run --cwd backend smoke:real-keys (--provider <openrouter|opencode-go> | --all) [flags]",
+    "Usage: bun run --cwd backend smoke:real-keys (--provider <openrouter|opencode-go|zai> | --all) [flags]",
     "",
     "Flags:",
     "  --key <value>              Shared provider API key",
     "  --openrouter-key <value>   OpenRouter API key",
     "  --opencode-go-key <value>  OpenCode Go API key",
+    "  --zai-key <value>          Z.AI API key",
     "  --model <id>               Exact model id for a single-provider smoke",
     "  --turns <n>                Positive turn cap, default 3",
     "  --budget <usd>             Optional non-negative budget cap",
@@ -87,8 +92,8 @@ function readArgs(argv: readonly string[]): SmokeOptions {
     switch (arg) {
       case "--provider": {
         const provider = readRequiredValue("--provider", next);
-        if (provider !== "openrouter" && provider !== "opencode-go") {
-          throw new UsageError("--provider must be openrouter or opencode-go");
+        if (provider !== "openrouter" && provider !== "opencode-go" && provider !== "zai") {
+          throw new UsageError("--provider must be openrouter, opencode-go, or zai");
         }
 
         options.providers = [provider];
@@ -96,7 +101,7 @@ function readArgs(argv: readonly string[]): SmokeOptions {
         break;
       }
       case "--all":
-        options.providers = ["openrouter", "opencode-go"];
+        options.providers = ["openrouter", "opencode-go", "zai"];
         break;
       case "--key":
         options.key = readRequiredValue("--key", next);
@@ -108,6 +113,10 @@ function readArgs(argv: readonly string[]): SmokeOptions {
         break;
       case "--opencode-go-key":
         options.opencodeGoKey = readRequiredValue("--opencode-go-key", next);
+        index += 1;
+        break;
+      case "--zai-key":
+        options.zaiKey = readRequiredValue("--zai-key", next);
         index += 1;
         break;
       case "--model":
@@ -156,11 +165,23 @@ function keyForProvider(options: SmokeOptions, providerId: ProviderId): string |
     return options.openrouterKey ?? options.key ?? process.env.OPENROUTER_API_KEY;
   }
 
+  if (providerId === "zai") {
+    return options.zaiKey ?? options.key ?? process.env.ZAI_API_KEY;
+  }
+
   return options.opencodeGoKey ?? options.key ?? process.env.OPENCODE_GO_API_KEY;
 }
 
 function adapterFor(providerId: ProviderId): ProviderAdapter {
-  return providerId === "openrouter" ? createOpenRouterAdapter() : createOpenCodeGoAdapter();
+  if (providerId === "openrouter") {
+    return createOpenRouterAdapter();
+  }
+
+  if (providerId === "zai") {
+    return createZaiAdapter();
+  }
+
+  return createOpenCodeGoAdapter();
 }
 
 function providerModelId(providerId: ProviderId, modelId: string): string {
@@ -168,34 +189,52 @@ function providerModelId(providerId: ProviderId, modelId: string): string {
     return modelId.replace(/^opencode-go\//, "");
   }
 
+  if (providerId === "zai") {
+    return modelId.replace(/^zai\//, "");
+  }
+
   return modelId;
+}
+
+function authHeadersFor(providerId: ProviderId, endpoint: string): Record<string, string> {
+  if (providerId === "opencode-go" && endpoint.endsWith("/messages")) {
+    return { "x-api-key": "[redacted]" };
+  }
+
+  return { Authorization: "Bearer [redacted]" };
 }
 
 function requestPlanFor(providerId: ProviderId, modelId: string) {
   const entry = getPricingEntry(providerId, modelId);
+  const endpoint = entry?.endpoint ?? DEFAULT_ENDPOINTS[providerId];
+  const includeResponseFormat = providerId !== "opencode-go";
 
   return {
     providerId,
     modelId,
-    url: entry?.endpoint ?? DEFAULT_ENDPOINTS[providerId],
+    url: endpoint,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer [redacted]",
+      ...authHeadersFor(providerId, endpoint),
     },
     body: {
       model: providerModelId(providerId, modelId),
       stream: false,
       temperature: 0,
       max_tokens: 200,
-      response_format: { type: "json_object" },
+      ...(providerId === "zai" ? { thinking: { type: "enabled", clear_thinking: true } } : {}),
+      ...(includeResponseFormat ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: "[system prompt]" },
         {
           role: "user",
           content: [
             { type: "text", text: "[seed, ships remaining, and prior shots]" },
-            { type: "image_url", image_url: { url: "data:image/png;base64,[redacted]" } },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,[redacted]" },
+            },
           ],
         },
       ],
@@ -260,6 +299,20 @@ function withTurnCap(provider: ProviderAdapter, turns: number): ProviderAdapter 
   };
 }
 
+function defaultReasoningEnabled(provider: ProviderAdapter, modelId: string): boolean {
+  const unprefixedModelId = modelId.startsWith(`${provider.id}/`)
+    ? modelId.slice(provider.id.length + 1)
+    : modelId;
+  const prefixedModelId = `${provider.id}/${unprefixedModelId}`;
+  const model = provider.models.find(
+    (candidate) =>
+      candidate.id === modelId ||
+      candidate.id === unprefixedModelId ||
+      candidate.id === prefixedModelId,
+  );
+  return model?.reasoningMode === "forced_on" || model?.reasoningMode === "optional";
+}
+
 async function runProviderSmoke(
   options: SmokeOptions,
   providerId: ProviderId,
@@ -279,12 +332,14 @@ async function runProviderSmoke(
 
   return await withTempDatabase(async ({ db }) => {
     const queries = createQueries(db);
+    const provider = withTurnCap(adapterFor(providerId), options.turns);
     const outcome = await runEngine(
       `smoke-${providerId}`,
       {
         providerId,
         modelId,
         apiKey: key,
+        reasoningEnabled: defaultReasoningEnabled(provider, modelId),
         clientSession: "real-token-smoke",
         seedDate: new Date().toISOString().slice(0, 10),
         ...(options.budgetUsd === undefined ? {} : { budgetUsd: options.budgetUsd }),
@@ -295,7 +350,7 @@ async function runProviderSmoke(
           console.log(jsonLine({ providerId, modelId, turn: event }, keys));
         }
       },
-      { queries, provider: withTurnCap(adapterFor(providerId), options.turns) },
+      { queries, provider },
     );
     const meta = queries.getRunMeta(`smoke-${providerId}`);
 
@@ -317,9 +372,11 @@ function collectAllKeys(options: SmokeOptions | null): string[] {
     if (options.key !== undefined) keys.push(options.key);
     if (options.openrouterKey !== undefined) keys.push(options.openrouterKey);
     if (options.opencodeGoKey !== undefined) keys.push(options.opencodeGoKey);
+    if (options.zaiKey !== undefined) keys.push(options.zaiKey);
   }
   if (process.env.OPENROUTER_API_KEY !== undefined) keys.push(process.env.OPENROUTER_API_KEY);
   if (process.env.OPENCODE_GO_API_KEY !== undefined) keys.push(process.env.OPENCODE_GO_API_KEY);
+  if (process.env.ZAI_API_KEY !== undefined) keys.push(process.env.ZAI_API_KEY);
   return keys.filter((key) => key.length > 0);
 }
 

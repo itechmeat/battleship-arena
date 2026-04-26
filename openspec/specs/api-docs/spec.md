@@ -20,6 +20,11 @@ The backend SHALL expose `GET /api/openapi.json` returning a valid OpenAPI 3.1 d
 - **WHEN** a client inspects the `components.schemas` object on `GET /api/openapi.json`
 - **THEN** it contains at least the keys `ErrorEnvelope`, `HealthResponse`, `ShotResult`, `Outcome`, `ProvidersResponse`, `RunMeta`, `RunShotRow`, `LeaderboardResponse`, `SseEvent`, `StartRunRequest`, `StartRunResponse`, `AbortRunResponse`
 
+#### Scenario: ShotResult includes timeout and SSE telemetry fields
+
+- **WHEN** a client inspects `components.schemas.ShotResult` and `components.schemas.SseEvent`
+- **THEN** `ShotResult` includes `timeout`, and shot event schemas allow optional token, cost, duration, and timestamp fields for live metric rendering
+
 #### Scenario: StartRunRequest carries the four body fields
 
 - **WHEN** a client reads `components.schemas.StartRunRequest`

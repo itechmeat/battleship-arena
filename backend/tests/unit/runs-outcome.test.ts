@@ -38,9 +38,18 @@ describe("reduceOutcome", () => {
   });
 
   test("5 consecutive schema errors reach dnf_schema_errors", () => {
-    expect(
-      apply(Array.from({ length: 5 }, () => ({ kind: "schema_error" as const }))).outcome,
-    ).toBe("dnf_schema_errors");
+    const result = apply(Array.from({ length: 5 }, () => ({ kind: "schema_error" as const })));
+
+    expect(result.outcome).toBe("dnf_schema_errors");
+    expect(result.state.shotsFired).toBe(5);
+  });
+
+  test("timeout contributes to shot count and schema-error DNF streak", () => {
+    const result = apply(Array.from({ length: 5 }, () => ({ kind: "timeout" as const })));
+
+    expect(result.outcome).toBe("dnf_schema_errors");
+    expect(result.state.shotsFired).toBe(5);
+    expect(result.state.schemaErrors).toBe(5);
   });
 
   test("hit resets the consecutive schema-error streak", () => {
@@ -62,7 +71,7 @@ describe("reduceOutcome", () => {
   test("invalid_coordinate contributes to shot cap and resets the streak", () => {
     const result = apply([{ kind: "schema_error" }, { kind: "invalid_coordinate" }]);
 
-    expect(result.state.shotsFired).toBe(1);
+    expect(result.state.shotsFired).toBe(2);
     expect(result.state.invalidCoordinates).toBe(1);
     expect(result.state.consecutiveSchemaErrors).toBe(0);
   });

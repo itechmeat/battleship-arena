@@ -1,13 +1,23 @@
+import type { ReasoningMode } from "@battleship-arena/shared";
+
 export interface ProviderModel {
   id: string;
   displayName: string;
   hasReasoning: boolean;
+  reasoningMode: ReasoningMode;
 }
 
 export interface ProviderCallInput {
   modelId: string;
   apiKey: string;
-  boardPng: Uint8Array;
+  reasoningEnabled?: boolean;
+  boardText: string;
+  /**
+   * PNG rendering kept for vision-based fallback. Currently unused: the active code path
+   * sends `boardText` only. Re-enable in providers/openai-compatible.ts when revisiting
+   * the vision benchmark track.
+   */
+  boardPng?: Uint8Array;
   shipsRemaining: readonly string[];
   systemPrompt: string;
   mockCostUsd?: number;
@@ -16,6 +26,7 @@ export interface ProviderCallInput {
     col: number;
     result: "hit" | "miss" | "sunk";
   }[];
+  consecutiveSchemaErrors?: number;
   seedDate: string;
 }
 

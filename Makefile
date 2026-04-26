@@ -35,7 +35,7 @@ start:
 	else \
 		rm -f "$(BACKEND_PID_FILE)"; \
 		echo "Starting backend on http://127.0.0.1:$(BACKEND_PORT) with DATABASE_PATH=$(DATABASE_PATH)"; \
-		( cd backend && exec nohup env DATABASE_PATH="$(DATABASE_PATH)" PORT="$(BACKEND_PORT)" MOCK_TURN_DELAY_MS="$(MOCK_TURN_DELAY_MS)" SHUTDOWN_GRACE_SEC="$(SHUTDOWN_GRACE_SEC)" bun --watch ./src/index.ts ) >"$(BACKEND_LOG)" 2>&1 & \
+		( cd backend && exec env DATABASE_PATH="$(DATABASE_PATH)" PORT="$(BACKEND_PORT)" MOCK_TURN_DELAY_MS="$(MOCK_TURN_DELAY_MS)" SHUTDOWN_GRACE_SEC="$(SHUTDOWN_GRACE_SEC)" bun --watch ./src/index.ts ) >"$(BACKEND_LOG)" 2>&1 & \
 		echo $$! >"$(BACKEND_PID_FILE)"; \
 	fi
 	@if [ -f "$(WEB_PID_FILE)" ] && kill -0 "$$(cat "$(WEB_PID_FILE)")" 2>/dev/null; then \
@@ -43,7 +43,7 @@ start:
 	else \
 		rm -f "$(WEB_PID_FILE)"; \
 		echo "Starting frontend on http://$(WEB_HOST):$(WEB_PORT)"; \
-		( cd web && exec nohup bun run dev -- --host "$(WEB_HOST)" --port "$(WEB_PORT)" ) >"$(WEB_LOG)" 2>&1 & \
+		( cd web && exec bun run dev -- --host "$(WEB_HOST)" --port "$(WEB_PORT)" ) >"$(WEB_LOG)" 2>&1 & \
 		echo $$! >"$(WEB_PID_FILE)"; \
 	fi
 	@sleep 1

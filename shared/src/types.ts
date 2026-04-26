@@ -20,7 +20,15 @@ export interface BoardView {
   cells: readonly CellState[];
 }
 
-export type ShotResult = "hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate";
+export type ShotResult =
+  | "hit"
+  | "miss"
+  | "sunk"
+  | "schema_error"
+  | "invalid_coordinate"
+  | "timeout";
+
+export type ReasoningMode = "optional" | "forced_on" | "forced_off";
 
 export interface RunMeta {
   id: string;
@@ -28,6 +36,7 @@ export interface RunMeta {
   providerId: string;
   modelId: string;
   displayName: string;
+  reasoningEnabled: boolean;
   startedAt: number;
   endedAt: number | null;
   outcome: Outcome | null;
@@ -64,6 +73,7 @@ export interface StartRunInput {
   providerId: string;
   modelId: string;
   apiKey: string;
+  reasoningEnabled: boolean;
   budgetUsd?: number;
   mockCostUsd?: number;
   clientSession: string;
@@ -90,6 +100,7 @@ export interface ProvidersResponseModel {
   id: string;
   displayName: string;
   hasReasoning: boolean;
+  reasoningMode: ReasoningMode;
   pricing: ModelPricingView;
   estimatedPromptTokens: number;
   estimatedImageTokens: number;
@@ -120,6 +131,7 @@ export interface LeaderboardRow {
   providerId: string;
   modelId: string;
   displayName: string;
+  reasoningEnabled: boolean;
   shotsToWin: number;
   runsCount: number;
   bestRunId: string | null;

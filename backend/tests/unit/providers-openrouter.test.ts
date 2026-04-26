@@ -34,7 +34,7 @@ describe("OpenRouter adapter", () => {
       {
         modelId: "openai/gpt-5-nano",
         apiKey: "sk-test",
-        boardPng: new Uint8Array([1, 2, 3]),
+        boardText: "   ABCDEFGHIJ\n01 ..........",
         shipsRemaining: ["Carrier"],
         systemPrompt: "Return JSON.",
         priorShots: [],
@@ -46,12 +46,63 @@ describe("OpenRouter adapter", () => {
     expect(requests[0]?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(requests[0]?.authorization).toBe("Bearer sk-test");
     expect(requests[0]?.body.model).toBe("openai/gpt-5-nano");
-    expect(JSON.stringify(requests[0]?.body)).toContain("data:image/png;base64,AQID");
+    expect(requests[0]?.body.max_tokens).toBe(2_048);
+    expect(requests[0]?.body.reasoning).toEqual({
+      effort: "minimal",
+      exclude: true,
+    });
+    expect(requests[0]?.body.verbosity).toBe("low");
+    expect(JSON.stringify(requests[0]?.body)).toContain("Current board:");
+    expect(JSON.stringify(requests[0]?.body)).not.toContain("Ships still afloat");
+    expect(JSON.stringify(requests[0]?.body)).toContain("No separate shot history is provided");
+    expect(JSON.stringify(requests[0]?.body)).toContain(
+      "Rule-filtered candidate cells for this turn",
+    );
+    expect(JSON.stringify(requests[0]?.body)).toContain("Pick one listed legal candidate cell now");
+    expect(JSON.stringify(requests[0]?.body)).not.toContain("Recommended legal shot");
+    expect(JSON.stringify(requests[0]?.body)).not.toContain("Return exactly");
+    expect(JSON.stringify(requests[0]?.body)).not.toContain("Your last");
+    expect(JSON.stringify(requests[0]?.body)).not.toContain("data:image/png;base64");
     expect(output.rawText).toBe('{"row":1,"col":2,"reasoning":"probe"}');
     expect(output.tokensIn).toBe(1000);
     expect(output.tokensOut).toBe(500);
     expect(output.reasoningTokens).toBe(100);
     expect(output.costUsdMicros).toBe(250);
+  });
+
+  test("omits reasoning request fields when an optional reasoning model is run with reasoning disabled", async () => {
+    const requests: Array<{ body: Record<string, unknown> }> = [];
+    const fetch = (async (_url, init) => {
+      requests.push({
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+
+      return Response.json({
+        choices: [{ message: { content: '{"row":1,"col":2}' } }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 20,
+        },
+      });
+    }) as typeof globalThis.fetch;
+    const adapter = createOpenRouterAdapter({ fetch, pricing: PRICING_TABLE });
+
+    await adapter.call(
+      {
+        modelId: "openai/gpt-5-nano",
+        apiKey: "sk-test",
+        reasoningEnabled: false,
+        boardText: "   ABCDEFGHIJ\n01 ..........",
+        shipsRemaining: ["Carrier"],
+        systemPrompt: "Return JSON.",
+        priorShots: [],
+        seedDate: "2026-04-24",
+      },
+      new AbortController().signal,
+    );
+
+    expect(requests[0]?.body).not.toHaveProperty("reasoning");
+    expect(requests[0]?.body.max_tokens).toBe(200);
   });
 
   test("returns non-JSON 200 bodies as raw text for schema-error classification", async () => {
@@ -65,7 +116,7 @@ describe("OpenRouter adapter", () => {
       {
         modelId: "openai/gpt-5-nano",
         apiKey: "sk-test",
-        boardPng: new Uint8Array([1, 2, 3]),
+        boardText: "   ABCDEFGHIJ\n01 ..........",
         shipsRemaining: ["Carrier"],
         systemPrompt: "Return JSON.",
         priorShots: [],
@@ -110,12 +161,15 @@ describe("OpenRouter adapter", () => {
             completion_tokens: 500,
           },
         })) as unknown as typeof globalThis.fetch;
-      const adapter = createOpenRouterAdapter({ fetch, pricing: PRICING_TABLE });
+      const adapter = createOpenRouterAdapter({
+        fetch,
+        pricing: PRICING_TABLE,
+      });
       const output = await adapter.call(
         {
           modelId: "openai/gpt-5-nano",
           apiKey: sentinelKey,
-          boardPng: new Uint8Array([1, 2, 3]),
+          boardText: "   ABCDEFGHIJ\n01 ..........",
           shipsRemaining: ["Carrier"],
           systemPrompt: "Return JSON.",
           priorShots: [],
@@ -136,7 +190,9 @@ describe("OpenRouter adapter", () => {
 
   test("translates HTTP auth failures to unreachable ProviderError", async () => {
     const fetch = (async () =>
-      new Response("bad key", { status: 401 })) as unknown as typeof globalThis.fetch;
+      new Response("bad key", {
+        status: 401,
+      })) as unknown as typeof globalThis.fetch;
     const adapter = createOpenRouterAdapter({ fetch, pricing: PRICING_TABLE });
 
     await expect(
@@ -144,7 +200,7 @@ describe("OpenRouter adapter", () => {
         {
           modelId: "openai/gpt-5-nano",
           apiKey: "sk-test",
-          boardPng: new Uint8Array([1, 2, 3]),
+          boardText: "   ABCDEFGHIJ\n01 ..........",
           shipsRemaining: ["Carrier"],
           systemPrompt: "Return JSON.",
           priorShots: [],
@@ -162,7 +218,7 @@ describe("OpenRouter adapter", () => {
         {
           modelId: "openai/gpt-5-nano",
           apiKey: "sk-test",
-          boardPng: new Uint8Array([1, 2, 3]),
+          boardText: "   ABCDEFGHIJ\n01 ..........",
           shipsRemaining: ["Carrier"],
           systemPrompt: "Return JSON.",
           priorShots: [],

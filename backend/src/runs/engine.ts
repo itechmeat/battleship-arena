@@ -9,9 +9,12 @@ import {
 } from "@battleship-arena/shared";
 
 import { generateBoard, type BoardLayout, type ShipPlacement } from "../board/generator.ts";
-import { renderBoardPng } from "../board/renderer.ts";
+import { renderBoardText } from "../board/text-renderer.ts";
+// PNG renderer kept for the vision-based track. Disabled in this build; see
+// providers/openai-compatible.ts for the corresponding image_url message branch.
+// import { renderBoardPng } from "../board/renderer.ts";
 import type { Queries } from "../db/queries.ts";
-import { isProviderError } from "../providers/errors.ts";
+import { isProviderError, ProviderError } from "../providers/errors.ts";
 import type { ProviderAdapter } from "../providers/types.ts";
 
 import {
@@ -24,6 +27,7 @@ import { SYSTEM_PROMPT } from "./prompt.ts";
 
 const RAW_RESPONSE_LIMIT = 8 * 1024;
 const REASONING_TEXT_LIMIT = 2 * 1024;
+const DEFAULT_TURN_TIMEOUT_MS = 60_000;
 type ShotRunLoopEvent = Exclude<RunLoopEvent, { kind: "abort" }>;
 
 type Awaitable<T> = T | Promise<T>;
@@ -44,6 +48,7 @@ export interface RunEngineDeps {
   queries: Queries;
   provider: ProviderAdapter;
   now?: () => number;
+  turnTimeoutMs?: number;
 }
 
 function truncateText(text: string, limit: number): string {
@@ -93,6 +98,69 @@ function addReasoningTokens(current: number | null, next: number | null): number
 
 function serializeProviderError(error: { cause: string }): string {
   return truncateText(error.cause, REASONING_TEXT_LIMIT);
+}
+
+function abortError(): DOMException {
+  return new DOMException("Aborted", "AbortError");
+}
+
+async function withTurnTimeout<T>(
+  providerId: string,
+  timeoutMs: number,
+  parentSignal: AbortSignal,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  if (parentSignal.aborted) {
+    throw abortError();
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let rejectParentAbort: ((error: DOMException) => void) | null = null;
+
+  const timeoutError = new ProviderError({
+    kind: "transient",
+    code: "timeout",
+    providerId,
+    message: "Provider turn timed out",
+    cause: `Provider turn timed out after ${timeoutMs} ms`,
+  });
+
+  const onParentAbort = () => {
+    controller.abort(parentSignal.reason);
+    rejectParentAbort?.(abortError());
+  };
+
+  parentSignal.addEventListener("abort", onParentAbort, { once: true });
+
+  const parentAbort = new Promise<never>((_, reject) => {
+    rejectParentAbort = reject;
+  });
+
+  const turnTimeout = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation(controller.signal), parentAbort, turnTimeout]);
+  } catch (error) {
+    if (timedOut && isAbortError(error)) {
+      throw timeoutError;
+    }
+
+    throw error;
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+
+    parentSignal.removeEventListener("abort", onParentAbort);
+  }
 }
 
 function buildBoardView(
@@ -254,6 +322,7 @@ export async function runEngine(
   deps: RunEngineDeps,
 ): Promise<Outcome | null> {
   const now = deps.now ?? Date.now;
+  const turnTimeoutMs = deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
   const startedAt = now();
   const layout = generateBoard(input.seedDate);
   const model = deps.provider.models.find((candidate) => candidate.id === input.modelId);
@@ -269,6 +338,7 @@ export async function runEngine(
     providerId: input.providerId,
     modelId: input.modelId,
     displayName: model.displayName,
+    reasoningEnabled: input.reasoningEnabled,
     startedAt,
     clientSession: input.clientSession,
     budgetUsdMicros,
@@ -323,22 +393,30 @@ export async function runEngine(
   };
 
   while (true) {
-    const boardPng = renderBoardPng(buildBoardView(layout, legalPriorShots));
+    const boardText = renderBoardText(buildBoardView(layout, legalPriorShots));
     const turnStartedAt = now();
 
     try {
-      const providerOutput = await deps.provider.call(
-        {
-          modelId: input.modelId,
-          apiKey: input.apiKey,
-          boardPng,
-          shipsRemaining: shipsRemaining(layout, legalPriorShots),
-          systemPrompt: SYSTEM_PROMPT,
-          ...(input.mockCostUsd === undefined ? {} : { mockCostUsd: input.mockCostUsd }),
-          priorShots: legalPriorShots,
-          seedDate: input.seedDate,
-        },
+      const providerOutput = await withTurnTimeout(
+        deps.provider.id,
+        turnTimeoutMs,
         signal,
+        (turnSignal) =>
+          deps.provider.call(
+            {
+              modelId: input.modelId,
+              apiKey: input.apiKey,
+              reasoningEnabled: input.reasoningEnabled,
+              boardText,
+              shipsRemaining: shipsRemaining(layout, legalPriorShots),
+              systemPrompt: SYSTEM_PROMPT,
+              ...(input.mockCostUsd === undefined ? {} : { mockCostUsd: input.mockCostUsd }),
+              priorShots: legalPriorShots,
+              consecutiveSchemaErrors: state.consecutiveSchemaErrors,
+              seedDate: input.seedDate,
+            },
+            turnSignal,
+          ),
       );
 
       totals.tokensIn += providerOutput.tokensIn;
@@ -385,6 +463,12 @@ export async function runEngine(
           classified.reasoningText === null
             ? null
             : truncateText(classified.reasoningText, REASONING_TEXT_LIMIT),
+        tokensIn: providerOutput.tokensIn,
+        tokensOut: providerOutput.tokensOut,
+        reasoningTokens: providerOutput.reasoningTokens,
+        costUsdMicros: providerOutput.costUsdMicros,
+        durationMs: providerOutput.durationMs,
+        createdAt,
       });
 
       shotIndex += 1;
@@ -428,12 +512,14 @@ export async function runEngine(
         const createdAt = now();
         const llmError = serializeProviderError(error);
 
+        const failedResult = error.code === "timeout" ? "timeout" : "schema_error";
+
         deps.queries.appendShot({
           runId,
           idx: shotIndex,
           row: null,
           col: null,
-          result: "schema_error",
+          result: failedResult,
           rawResponse: "",
           reasoningText: null,
           llmError,
@@ -451,15 +537,21 @@ export async function runEngine(
           idx: shotIndex,
           row: null,
           col: null,
-          result: "schema_error",
+          result: failedResult,
           reasoning: null,
+          tokensIn: 0,
+          tokensOut: 0,
+          reasoningTokens: null,
+          costUsdMicros: 0,
+          durationMs: createdAt - turnStartedAt,
+          createdAt,
         });
 
         shotIndex += 1;
 
         const reduced = reduceOutcome(
           state,
-          { kind: "schema_error", costUsdMicros: 0 },
+          { kind: failedResult, costUsdMicros: 0 },
           { budgetMicros: budgetUsdMicros },
         );
         state = reduced.state;

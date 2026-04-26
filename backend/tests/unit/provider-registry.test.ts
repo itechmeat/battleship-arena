@@ -4,7 +4,14 @@ import { createProviderRegistry, type ProviderAdapter } from "../../src/provider
 
 const fakeAdapter: ProviderAdapter = {
   id: "fake",
-  models: [{ id: "fake-model", displayName: "Fake model", hasReasoning: false }],
+  models: [
+    {
+      id: "fake-model",
+      displayName: "Fake model",
+      hasReasoning: false,
+      reasoningMode: "forced_off",
+    },
+  ],
   async call() {
     return {
       rawText: "{}",

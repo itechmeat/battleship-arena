@@ -13,6 +13,7 @@ describe("GET /api/providers", () => {
       providers: Array<{
         id: string;
         models: Array<{
+          id: string;
           pricing: { inputUsdPerMtok: number; outputUsdPerMtok: number };
           estimatedPromptTokens: number;
           estimatedImageTokens: number;
@@ -20,6 +21,7 @@ describe("GET /api/providers", () => {
           estimatedCostRange: { minUsd: number; maxUsd: number };
           priceSource: string;
           lastReviewedAt: string;
+          reasoningMode: string;
         }>;
       }>;
     };
@@ -31,6 +33,7 @@ describe("GET /api/providers", () => {
     expect(body.providers.map((provider) => provider.id).sort()).toEqual([
       "opencode-go",
       "openrouter",
+      "zai",
     ]);
     const openrouter = body.providers.find((provider) => provider.id === "openrouter");
     if (openrouter === undefined) {
@@ -40,6 +43,7 @@ describe("GET /api/providers", () => {
     if (firstModel === undefined) {
       throw new Error("api-providers: openrouter.models is empty");
     }
+    const kimiModel = openrouter.models.find((model) => model.id === "moonshotai/kimi-k2.6");
     expect(firstModel).toEqual(
       expect.objectContaining({
         estimatedPromptTokens: expect.any(Number),
@@ -57,6 +61,21 @@ describe("GET /api/providers", () => {
       expect.objectContaining({
         inputUsdPerMtok: expect.any(Number),
         outputUsdPerMtok: expect.any(Number),
+      }),
+    );
+    expect(kimiModel).toEqual(
+      expect.objectContaining({
+        displayName: "MoonshotAI: Kimi K2.6",
+        hasReasoning: true,
+        reasoningMode: "optional",
+        lastReviewedAt: "2026-04-24",
+      }),
+    );
+    const zai = body.providers.find((provider) => provider.id === "zai");
+    expect(zai?.models[0]).toEqual(
+      expect.objectContaining({
+        hasReasoning: true,
+        reasoningMode: "forced_on",
       }),
     );
     expect(JSON.stringify(body)).not.toContain("mock");

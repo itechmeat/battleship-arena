@@ -19,6 +19,7 @@ export type RunLoopEvent =
   | { kind: "miss"; costUsdMicros?: number }
   | { kind: "sunk"; costUsdMicros?: number }
   | { kind: "schema_error"; costUsdMicros?: number }
+  | { kind: "timeout"; costUsdMicros?: number }
   | { kind: "invalid_coordinate"; costUsdMicros?: number }
   | { kind: "abort"; reason: "viewer" | "server_restart" };
 
@@ -104,9 +105,11 @@ export function reduceOutcome(
 
       return { state: nextState, outcome: resolveOutcome(nextState, context) };
     }
-    case "schema_error": {
+    case "schema_error":
+    case "timeout": {
       const nextState: RunLoopState = {
         ...state,
+        shotsFired: state.shotsFired + 1,
         schemaErrors: state.schemaErrors + 1,
         consecutiveSchemaErrors: state.consecutiveSchemaErrors + 1,
         accumulatedCostMicros: state.accumulatedCostMicros + costFor(event),

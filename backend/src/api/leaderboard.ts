@@ -22,6 +22,22 @@ function readScope(value: string | undefined): LeaderboardScope | null {
   return null;
 }
 
+function readOptionalBoolean(value: string | undefined): boolean | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return null;
+}
+
 function rerankRows(rows: readonly LeaderboardRow[]): LeaderboardRow[] {
   return rows.map((row, index) => ({ ...row, rank: index + 1 }));
 }
@@ -42,12 +58,20 @@ export function createLeaderboardRouter(options: LeaderboardRouterOptions) {
 
     const providerId = context.req.query("providerId");
     const modelId = context.req.query("modelId");
+    const reasoningEnabled = readOptionalBoolean(context.req.query("reasoningEnabled"));
+    if (reasoningEnabled === null) {
+      return respondError(context, "invalid_input", 400, "Invalid input", {
+        field: "reasoningEnabled",
+      });
+    }
+
     const response = options.queries.getLeaderboard(scope, readToday());
     const rows = rerankRows(
       response.rows.filter(
         (row) =>
           (providerId === undefined || row.providerId === providerId) &&
-          (modelId === undefined || row.modelId === modelId),
+          (modelId === undefined || row.modelId === modelId) &&
+          (reasoningEnabled === undefined || row.reasoningEnabled === reasoningEnabled),
       ),
     );
 

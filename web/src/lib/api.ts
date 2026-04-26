@@ -64,6 +64,7 @@ export interface StartRunPayload {
   providerId: string;
   modelId: string;
   apiKey: string;
+  reasoningEnabled: boolean;
   budgetUsd?: number;
   mockCost?: number;
 }
@@ -101,6 +102,7 @@ export function getProviders(signal?: AbortSignal): Promise<ProvidersResponse> {
 export interface GetLeaderboardOptions {
   providerId?: string;
   modelId?: string;
+  reasoningEnabled?: boolean;
   signal?: AbortSignal;
 }
 
@@ -114,6 +116,9 @@ export function getLeaderboard(
   }
   if (options.modelId !== undefined && options.modelId.length > 0) {
     search.set("modelId", options.modelId);
+  }
+  if (options.reasoningEnabled !== undefined) {
+    search.set("reasoningEnabled", String(options.reasoningEnabled));
   }
 
   return request<LeaderboardResponse>(

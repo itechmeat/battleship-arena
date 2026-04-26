@@ -17,7 +17,10 @@ export function Leaderboard() {
   const [scope, setScope] = createSignal<LeaderboardScope>("today");
   const [providerFilter, setProviderFilter] = createSignal("");
   const [modelFilter, setModelFilter] = createSignal("");
-  const [catalog, setCatalog] = createSignal<ProvidersResponse>({ providers: [] });
+  const [reasoningFilter, setReasoningFilter] = createSignal<"" | "true" | "false">("");
+  const [catalog, setCatalog] = createSignal<ProvidersResponse>({
+    providers: [],
+  });
   const [leaderboard, setLeaderboard] = createSignal<LeaderboardResponse | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
@@ -34,7 +37,10 @@ export function Leaderboard() {
     return catalog().providers.flatMap((provider) => provider.models);
   });
   const visibleRows = createMemo<Array<LeaderboardRow & { rank: number }>>(() =>
-    (leaderboard()?.rows ?? []).map((row, index) => ({ ...row, rank: index + 1 })),
+    (leaderboard()?.rows ?? []).map((row, index) => ({
+      ...row,
+      rank: index + 1,
+    })),
   );
 
   onMount(() => {
@@ -59,6 +65,7 @@ export function Leaderboard() {
     const currentScope = scope();
     const providerId = providerFilter();
     const modelId = modelFilter();
+    const reasoningEnabled = reasoningFilter();
 
     setLoading(true);
     setError(null);
@@ -68,6 +75,9 @@ export function Leaderboard() {
           await getLeaderboard(currentScope, {
             ...(providerId.length === 0 ? {} : { providerId }),
             ...(modelId.length === 0 ? {} : { modelId }),
+            ...(reasoningEnabled.length === 0
+              ? {}
+              : { reasoningEnabled: reasoningEnabled === "true" }),
             signal: controller.signal,
           }),
         );
@@ -140,6 +150,19 @@ export function Leaderboard() {
             </For>
           </select>
         </label>
+        <label class={styles.filter}>
+          <span>Reasoning</span>
+          <select
+            value={reasoningFilter()}
+            onInput={(event) =>
+              setReasoningFilter(event.currentTarget.value as "" | "true" | "false")
+            }
+          >
+            <option value="">All</option>
+            <option value="true">On</option>
+            <option value="false">Off</option>
+          </select>
+        </label>
       </div>
 
       <Show when={!loading()} fallback={<p class={styles.note}>Loading leaderboard...</p>}>
@@ -151,6 +174,7 @@ export function Leaderboard() {
                   <th class={styles.numeric}>Rank</th>
                   <th>Model</th>
                   <th>Provider</th>
+                  <th>Reasoning</th>
                   <th class={styles.numeric}>Runs</th>
                   <th class={styles.numeric}>Shots</th>
                   {scope() === "today" ? <th>Replay</th> : null}
@@ -163,6 +187,7 @@ export function Leaderboard() {
                       <td class={styles.numeric}>{entry.rank}</td>
                       <td>{entry.displayName}</td>
                       <td>{entry.providerId}</td>
+                      <td>{entry.reasoningEnabled ? "On" : "Off"}</td>
                       <td class={styles.numeric}>{entry.runsCount}</td>
                       <td class={styles.numeric}>{formatShots(entry.shotsToWin)}</td>
                       {scope() === "today" ? (

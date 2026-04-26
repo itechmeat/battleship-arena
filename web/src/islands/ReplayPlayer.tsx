@@ -41,6 +41,9 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
       : [];
   });
   const visibleShots = createMemo(() => shots().slice(0, state().idx));
+  const progressPercent = createMemo(() =>
+    shots().length === 0 ? 0 : Math.round((state().idx / shots().length) * 100),
+  );
   const errorMessage = createMemo(() => {
     const current = state();
     return current.status === "error" ? current.message : null;
@@ -142,6 +145,10 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
               <BoardView shots={visibleShots()} />
             </div>
 
+            <div class={styles.progress} aria-hidden="true">
+              <span style={{ width: `${progressPercent()}%` }} />
+            </div>
+
             <div class={styles.controls}>
               <button
                 class={styles.button}
@@ -156,6 +163,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
                 class={`${styles.button} ${styles.secondary}`}
                 type="button"
                 onClick={() => dispatch({ kind: "stepBack" })}
+                disabled={state().idx === 0}
               >
                 Back
               </button>
@@ -163,6 +171,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
                 class={`${styles.button} ${styles.secondary}`}
                 type="button"
                 onClick={() => dispatch({ kind: "stepForward" })}
+                disabled={state().idx === shots().length}
               >
                 Forward
               </button>
@@ -184,6 +193,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
                 aria-valuemax={shots().length}
                 aria-valuenow={state().idx}
                 aria-valuetext={`Shot ${state().idx} of ${shots().length}`}
+                disabled={state().status === "playing"}
                 onInput={(event) =>
                   dispatch({
                     kind: "seek",

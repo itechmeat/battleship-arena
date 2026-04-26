@@ -17,6 +17,17 @@ describe("parseShot", () => {
     });
   });
 
+  test("parses cell notation with optional zero-padded rows", () => {
+    expect(parseShot('{"cell":"F04"}')).toEqual({
+      kind: "ok",
+      shot: { row: 3, col: 5 },
+    });
+    expect(parseShot('{"cell":"J10"}')).toEqual({
+      kind: "ok",
+      shot: { row: 9, col: 9 },
+    });
+  });
+
   test("drops extra top-level keys", () => {
     expect(parseShot('{"row":1,"col":2,"extra":"ignored"}')).toEqual({
       kind: "ok",

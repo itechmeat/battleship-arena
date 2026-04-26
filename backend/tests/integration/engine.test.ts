@@ -13,6 +13,7 @@ function baseInput(modelId: string, apiKey = "test-key") {
     providerId: "mock",
     modelId,
     apiKey,
+    reasoningEnabled: false,
     clientSession: "session-1",
     seedDate: "2026-04-21",
   };
@@ -102,7 +103,7 @@ describe("runEngine", () => {
 
       expect(outcome).toBe("dnf_schema_errors");
       expect(meta.outcome).toBe("dnf_schema_errors");
-      expect(meta.shotsFired).toBe(0);
+      expect(meta.shotsFired).toBe(5);
       expect(meta.schemaErrors).toBe(5);
       expect(shots).toHaveLength(5);
       expect(shots.every((shot) => shot.result === "schema_error")).toBe(true);
@@ -254,6 +255,31 @@ describe("runEngine", () => {
     });
   }, 30_000);
 
+  test("provider turn timeout records a timeout and continues", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({ delayMs: 50 });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider, turnTimeoutMs: 1 },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+      const shots = queries.listShots("run-1");
+
+      expect(outcome).toBe("dnf_schema_errors");
+      expect(meta?.schemaErrors).toBe(5);
+      expect(meta?.shotsFired).toBe(5);
+      expect(shots).toHaveLength(5);
+      expect(shots.every((shot) => shot.result === "timeout")).toBe(true);
+      expect(shots.every((shot) => shot.llmError?.includes("timed out"))).toBe(true);
+    });
+  });
+
   test("five consecutive transient ProviderErrors reach dnf_schema_errors", async () => {
     await withTempDatabase(async ({ db }) => {
       const queries = createQueries(db);
@@ -282,7 +308,7 @@ describe("runEngine", () => {
 
       expect(outcome).toBe("dnf_schema_errors");
       expect(meta?.schemaErrors).toBe(5);
-      expect(meta?.shotsFired).toBe(0);
+      expect(meta?.shotsFired).toBe(5);
       expect(shots).toHaveLength(5);
       expect(shots.every((shot) => shot.result === "schema_error")).toBe(true);
       expect(shots.every((shot) => shot.llmError?.includes("503 upstream"))).toBe(true);

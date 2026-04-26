@@ -64,6 +64,7 @@ describe("api client", () => {
         providerId: "mock",
         modelId: "mock-happy",
         apiKey: "test-key",
+        reasoningEnabled: false,
       }),
     ).rejects.toBeInstanceOf(ApiError);
   });
@@ -92,7 +93,10 @@ describe("api client", () => {
   });
 
   test("getProviders and getLeaderboard call the new API routes with filters and signal", async () => {
-    const calls: Array<{ path: string; signal: AbortSignal | null | undefined }> = [];
+    const calls: Array<{
+      path: string;
+      signal: AbortSignal | null | undefined;
+    }> = [];
     globalThis.fetch = mock(async (input, init) => {
       calls.push({ path: String(input), signal: init?.signal });
       return new Response(JSON.stringify({ providers: [], rows: [] }), {
@@ -108,13 +112,14 @@ describe("api client", () => {
     await getLeaderboard("all", {
       providerId: "openrouter",
       modelId: "openai/gpt-5-nano",
+      reasoningEnabled: true,
       signal: controller.signal,
     });
 
     expect(calls).toEqual([
       { path: "/api/providers", signal: undefined },
       {
-        path: "/api/leaderboard?scope=all&providerId=openrouter&modelId=openai%2Fgpt-5-nano",
+        path: "/api/leaderboard?scope=all&providerId=openrouter&modelId=openai%2Fgpt-5-nano&reasoningEnabled=true",
         signal: controller.signal,
       },
     ]);

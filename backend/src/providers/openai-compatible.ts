@@ -1,20 +1,27 @@
 import {
   calculateCostUsdMicros,
+  type PricingEntry,
   listProviderPricing,
+  reasoningModeForEntry,
   type PricingTable,
 } from "../pricing/catalog.ts";
 
 import { ProviderError, type ProviderErrorCode } from "./errors.ts";
 import { NonRetriable4xxError, requestText, TransientFailureError } from "./http.ts";
-import { encodePngDataUrl } from "./image.ts";
-import type { ProviderAdapter, ProviderCallInput, ProviderCallOutput } from "./types.ts";
+import type { ProviderAdapter, ProviderCallOutput, ProviderModel } from "./types.ts";
+import { buildProviderUserText } from "./prompt.ts";
 
 interface CreateOpenAiCompatibleAdapterOptions {
-  id: "openrouter" | "opencode-go";
+  id: PricingEntry["providerId"];
   displayName: string;
   fetch: typeof globalThis.fetch;
   pricing: PricingTable;
   defaultEndpoint: string;
+  authHeader?: "authorization" | "x-api-key";
+  includeVerbosity?: boolean;
+  includeResponseFormat?: boolean;
+  reasoningModelMaxTokens?: number;
+  reasoningRequestFields?: (model: PricingEntry) => Record<string, unknown>;
   headers?: Record<string, string>;
   mapRequestModelId?: (modelId: string) => string;
 }
@@ -35,6 +42,9 @@ interface ChatCompletionResponse {
     reasoning_tokens?: number;
   };
 }
+
+const REASONING_MODEL_MAX_TOKENS = 2_048;
+const NON_REASONING_MODEL_MAX_TOKENS = 200;
 
 function contentToText(content: unknown): string | null {
   if (typeof content === "string") {
@@ -65,23 +75,6 @@ function contentToText(content: unknown): string | null {
   }
 
   return null;
-}
-
-function buildUserText(input: ProviderCallInput): string {
-  const prior =
-    input.priorShots.length === 0
-      ? "No prior shots."
-      : input.priorShots
-          .map((shot) => `row ${shot.row}, col ${shot.col}: ${shot.result}`)
-          .join("\n");
-
-  return [
-    `Seed date: ${input.seedDate}`,
-    `Ships remaining: ${input.shipsRemaining.join(", ")}`,
-    "Prior legal shots:",
-    prior,
-    "Choose the next Battleship shot from the board image.",
-  ].join("\n");
 }
 
 function extractUsage(response: ChatCompletionResponse): {
@@ -175,23 +168,53 @@ function translateHttpError(providerId: string, error: unknown): ProviderError |
   return null;
 }
 
+function authHeaders(
+  apiKey: string,
+  header: CreateOpenAiCompatibleAdapterOptions["authHeader"],
+): Record<string, string> {
+  if (header === "x-api-key") {
+    return { "x-api-key": apiKey };
+  }
+
+  return { Authorization: `Bearer ${apiKey}` };
+}
+
+function resolveCallReasoningEnabled(
+  model: ProviderModel,
+  requested: boolean | undefined,
+): boolean {
+  if (!model.hasReasoning || model.reasoningMode === "forced_off") {
+    return false;
+  }
+
+  if (model.reasoningMode === "forced_on") {
+    return true;
+  }
+
+  return requested ?? true;
+}
+
 export function createOpenAiCompatibleAdapter(
   options: CreateOpenAiCompatibleAdapterOptions,
 ): ProviderAdapter {
   const entries = listProviderPricing(options.id, options.pricing);
-  const modelById = new Map(entries.map((entry) => [entry.modelId, entry]));
+  const entryById = new Map(entries.map((entry) => [entry.modelId, entry]));
+  const models = entries.map((entry) => ({
+    id: entry.modelId,
+    displayName: entry.displayName,
+    hasReasoning: entry.hasReasoning,
+    reasoningMode: entry.reasoningMode ?? reasoningModeForEntry(entry),
+  }));
+  const modelById = new Map(models.map((model) => [model.id, model]));
 
   return {
     id: options.id,
-    models: entries.map((entry) => ({
-      id: entry.modelId,
-      displayName: entry.displayName,
-      hasReasoning: entry.hasReasoning,
-    })),
+    models,
 
     async call(input, signal): Promise<ProviderCallOutput> {
       const model = modelById.get(input.modelId);
-      if (model === undefined) {
+      const entry = entryById.get(input.modelId);
+      if (model === undefined || entry === undefined) {
         throw new ProviderError({
           kind: "unreachable",
           code: "unsupported_model",
@@ -203,25 +226,38 @@ export function createOpenAiCompatibleAdapter(
       }
 
       const startedAt = Date.now();
+      const reasoningEnabled = resolveCallReasoningEnabled(model, input.reasoningEnabled);
+      const maxTokens = reasoningEnabled
+        ? (options.reasoningModelMaxTokens ?? REASONING_MODEL_MAX_TOKENS)
+        : NON_REASONING_MODEL_MAX_TOKENS;
+      const reasoningFields = reasoningEnabled
+        ? (options.reasoningRequestFields?.(entry) ?? {
+            reasoning: { effort: "minimal", exclude: true },
+          })
+        : {};
       let responseText: string;
       try {
         responseText = await requestText(
           {
             fetch: options.fetch,
-            url: model.endpoint ?? options.defaultEndpoint,
+            url: entry.endpoint ?? options.defaultEndpoint,
             init: {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${input.apiKey}`,
+                ...authHeaders(input.apiKey, options.authHeader),
                 ...options.headers,
               },
               body: JSON.stringify({
                 model: options.mapRequestModelId?.(input.modelId) ?? input.modelId,
                 stream: false,
                 temperature: 0,
-                max_tokens: 200,
-                response_format: { type: "json_object" },
+                max_tokens: maxTokens,
+                ...(options.includeVerbosity === false ? {} : { verbosity: "low" }),
+                ...reasoningFields,
+                ...(options.includeResponseFormat === false
+                  ? {}
+                  : { response_format: { type: "json_object" } }),
                 messages: [
                   {
                     role: "system",
@@ -229,17 +265,13 @@ export function createOpenAiCompatibleAdapter(
                   },
                   {
                     role: "user",
-                    content: [
-                      { type: "text", text: buildUserText(input) },
-                      {
-                        type: "image_url",
-                        image_url: {
-                          url: encodePngDataUrl(input.boardPng),
-                        },
-                      },
-                    ],
+                    content: buildProviderUserText(input),
                   },
                 ],
+                // Vision-based fallback temporarily disabled. To re-enable, replace the
+                // user content above with a multipart array that includes:
+                //   { type: "image_url", image_url: { url: encodePngDataUrl(input.boardPng) } }
+                // and ensure engine.ts populates `boardPng`.
               }),
             },
           },

@@ -12,6 +12,7 @@ function baseInput(modelId: string, apiKey = "test-key") {
     providerId: "mock",
     modelId,
     apiKey,
+    reasoningEnabled: false,
     clientSession: "session-1",
     seedDate: "2026-04-21",
   };
