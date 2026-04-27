@@ -4,8 +4,7 @@
   "categories": {
     "correctness": "error",
     "perf": "warn",
-    "suspicious": "warn",
-    "typescript": "warn"
+    "suspicious": "warn"
   },
   "rules": {
     "no-console": "off"

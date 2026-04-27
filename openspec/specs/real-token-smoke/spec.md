@@ -50,7 +50,7 @@ For each turn the script SHALL: parse the provider's response via the real adapt
 
 ### Requirement: Script stops on any terminal outcome
 
-The script SHALL terminate its game loop as soon as any of the following terminal outcomes is reached: `won`, `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, or `llm_unreachable`. On termination it MUST print the final outcome label and exit with code `0` (success) on every outcome, including DNFs, because the script's goal is to probe the adapter, not to win.
+The script SHALL terminate its game loop as soon as any of the following terminal outcomes is reached: `won`, `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, or `provider_rate_limited`. On termination it MUST print the final outcome label and exit with code `0` (success) on every outcome, including DNFs and provider-side rate limits, because the script's goal is to probe the adapter, not to win.
 
 #### Scenario: Terminal outcome stops the loop
 

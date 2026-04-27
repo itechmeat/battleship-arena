@@ -1,27 +1,25 @@
 ---
+import BaseHead from "../../../components/BaseHead.astro";
+import ServiceWorkerScript from "../../../components/ServiceWorkerScript.astro";
 import ReplayPlayer from "../../../islands/ReplayPlayer.tsx";
+import { APP_FONT_STACK, DYNAMIC_ROUTE_ID } from "../../../lib/page-shell.ts";
 
-const shouldRegisterServiceWorker = import.meta.env.PROD;
-const runId = Astro.params.id ?? "__dynamic__";
-const pageTitle = runId === "__dynamic__" ? "Replay" : `Replay ${runId}`;
+const runId = Astro.params.id ?? DYNAMIC_ROUTE_ID;
+const pageTitle = runId === DYNAMIC_ROUTE_ID ? "Replay" : `Replay ${runId}`;
 
 export function getStaticPaths() {
-  return [{ params: { id: "__dynamic__" } }];
+  return [{ params: { id: DYNAMIC_ROUTE_ID } }];
 }
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f766e" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <title>{pageTitle} | BattleShipArena</title>
-    <style is:global>
+    <BaseHead title={`${pageTitle} | BattleShipArena`} />
+    <style is:global define:vars={{ appFontStack: APP_FONT_STACK }}>
       :root {
         color-scheme: light;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-family: var(--appFontStack);
         background: #f8fafc;
       }
 
@@ -34,14 +32,6 @@ export function getStaticPaths() {
   <body>
     <ReplayPlayer runId={runId} client:load />
 
-    <script is:inline define:vars={{ shouldRegisterServiceWorker }}>
-      if (shouldRegisterServiceWorker) {
-        window.addEventListener("load", () => {
-          if ("serviceWorker" in navigator) {
-            void navigator.serviceWorker.register("/sw.js");
-          }
-        });
-      }
-    </script>
+    <ServiceWorkerScript />
   </body>
 </html>

@@ -14,8 +14,8 @@ const run: RunMeta = {
   id: "run-1",
   seedDate: "2026-04-24",
   providerId: "openrouter",
-  modelId: "openai/gpt-5-nano",
-  displayName: "OpenAI: GPT-5 Nano",
+  modelId: "openai/gpt-5.4-nano",
+  displayName: "OpenAI: GPT-5.4 Nano",
   reasoningEnabled: true,
   startedAt: 1,
   endedAt: 2,
@@ -30,6 +30,9 @@ const run: RunMeta = {
   reasoningTokens: null,
   costUsdMicros: 0,
   budgetUsdMicros: null,
+  terminalErrorCode: null,
+  terminalErrorStatus: null,
+  terminalErrorMessage: null,
 };
 
 function shot(idx: number): RunShotRow {

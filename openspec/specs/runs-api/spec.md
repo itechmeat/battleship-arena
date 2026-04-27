@@ -8,7 +8,7 @@ TBD - created by archiving change s2a-game-loop-mock. Update Purpose after archi
 
 ### Requirement: POST /api/runs starts a run and returns its id
 
-The backend SHALL expose `POST /api/runs` that accepts a JSON body `{ providerId, modelId, apiKey, budgetUsd? }` and responds with `{ runId }` on success. The handler MUST validate: `providerId` is a non-empty string and resolves in the provider registry; `modelId` is a non-empty string and exists in that provider's `models`; `apiKey` is a non-empty string; `budgetUsd`, when provided, is either `null`, `0`, or a finite strictly-positive number. The handler MUST persist the run's `runs.budget_usd_micros` as `NULL` when `budgetUsd` is absent, `null`, or `0`; when `budgetUsd` is strictly positive, the handler MUST persist `Math.floor(budgetUsd * 1_000_000)`. Any strictly-negative `budgetUsd`, non-finite `budgetUsd` (NaN, Infinity), or non-numeric `budgetUsd` MUST return status 400 with an `ErrorEnvelope` whose `code` is `invalid_input` and whose `detail.field` equals `"budgetUsd"`. Other validation failures MUST return status 400 with an `ErrorEnvelope` whose `code` is `invalid_input` and whose `detail.field` names the offending field. On success the handler MUST set `Cache-Control: no-store`, call the manager's `start` with `seedDate` set to today's UTC date (`YYYY-MM-DD`), attach the `client_session` read from the session cookie to the persisted row, and return status 200 with exactly `{ runId }`. The handler MUST NOT log or echo `apiKey` anywhere.
+The backend SHALL expose `POST /api/runs` that accepts a JSON body `{ providerId, modelId, apiKey, budgetUsd? }` and responds with `{ runId }` on success. The handler MUST validate: `providerId` is a non-empty string and resolves in the provider registry; `modelId` is a non-empty string and exists in that provider's `models`; `apiKey` is a non-empty string; `budgetUsd`, when provided, is either `null`, `0`, or a finite strictly-positive number. The handler MUST persist the run's `runs.budget_usd_micros` as `NULL` when `budgetUsd` is absent, `null`, or `0`; when `budgetUsd` is strictly positive, the handler MUST persist `Math.floor(budgetUsd * 1_000_000)`. Any strictly-negative `budgetUsd`, non-finite `budgetUsd` (NaN, Infinity), or non-numeric `budgetUsd` MUST return status 400 with an `ErrorEnvelope` whose `code` is `invalid_input` and whose `detail.field` equals `"budgetUsd"`. Other validation failures MUST return status 400 with an `ErrorEnvelope` whose `code` is `invalid_input` and whose `detail.field` names the offending field. On success the handler MUST set `Cache-Control: no-store`, call the manager's `start` with `seedDate` set to the fixed default benchmark seed (`2026-04-21`), attach the `client_session` read from the session cookie to the persisted row, and return status 200 with exactly `{ runId }`. The handler MUST NOT log or echo `apiKey` anywhere.
 
 #### Scenario: Happy path returns runId
 
@@ -57,12 +57,17 @@ The backend SHALL expose `POST /api/runs` that accepts a JSON body `{ providerId
 
 ### Requirement: GET /api/runs/:id returns the run metadata
 
-The backend SHALL expose `GET /api/runs/:id` that returns the `RunMeta` row for the given id with `Cache-Control: no-store`. On unknown id the response MUST be status 404 with `ErrorEnvelope.code` equal to `run_not_found`. The response MUST NOT include `client_session`.
+The backend SHALL expose `GET /api/runs/:id` that returns the `RunMeta` row for the given id with `Cache-Control: no-store`. The metadata MUST include nullable `terminalErrorCode`, `terminalErrorStatus`, and `terminalErrorMessage` fields. These fields MUST be non-null whenever a terminal provider rejection such as auth failure, quota exhaustion, or exhausted provider rate limiting ends the run, regardless of whether earlier shot rows already exist, and MUST contain only sanitized diagnostic text. Sanitization MUST remove API-key-like secrets and bearer tokens, strip raw upstream status prefixes when presenting user-facing text, and cap messages to the shared terminal-error text limit while preserving enough non-sensitive provider detail for diagnosis. They remain nullable for non-provider terminal outcomes. On unknown id the response MUST be status 404 with `ErrorEnvelope.code` equal to `run_not_found`. The response MUST NOT include `client_session`.
 
 #### Scenario: Known id returns metadata
 
 - **WHEN** a client GETs `/api/runs/<valid-id>` after a run has been started
 - **THEN** the response status is 200 and the body satisfies the `RunMeta` shape
+
+#### Scenario: Provider quota terminal error is visible in metadata
+
+- **WHEN** a run ends from an upstream provider response such as `403 Key limit exceeded`
+- **THEN** `GET /api/runs/<id>` returns `outcome === "llm_unreachable"`, `terminalErrorCode === "quota"`, `terminalErrorStatus === 403`, and `terminalErrorMessage` contains the sanitized upstream message
 
 #### Scenario: Unknown id returns run_not_found
 
@@ -215,7 +220,7 @@ The backend's HTTP API under `/api` SHALL additionally expose `GET /api/openapi.
 
 #### Scenario: Optional reasoning value is accepted
 
-- **WHEN** a client POSTs a valid run body with `providerId: "openrouter"`, `modelId: "openai/gpt-5-nano"`, and `reasoningEnabled: false` for that optional model
+- **WHEN** a client POSTs a valid run body with `providerId: "openrouter"`, `modelId: "openai/gpt-5.4-nano"`, and `reasoningEnabled: false` for that optional model
 - **THEN** the response is successful and the inserted run row stores `reasoning_enabled = false`
 
 #### Scenario: Omitted reasoningEnabled defaults from model policy

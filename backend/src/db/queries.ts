@@ -1,8 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import {
-  isOutcome,
-  type LeaderboardRow,
   type LeaderboardScope,
   type LeaderboardResponse,
   type Outcome,
@@ -12,40 +10,13 @@ import {
 } from "@battleship-arena/shared";
 
 import type { DatabaseHandle } from "./client.ts";
+import {
+  aggregateAllLeaderboardRows,
+  aggregateTodayLeaderboardRows,
+  type LeaderboardRunRow,
+} from "./leaderboard-aggregator.ts";
+import { mapRunMetaRow, mapRunShotRow } from "./row-mappers.ts";
 import { runShots, runs } from "./schema.ts";
-
-const SHOT_RESULTS: readonly ShotResult[] = [
-  "hit",
-  "miss",
-  "sunk",
-  "schema_error",
-  "invalid_coordinate",
-  "timeout",
-];
-
-function isShotResult(value: unknown): value is ShotResult {
-  return typeof value === "string" && SHOT_RESULTS.includes(value as ShotResult);
-}
-
-function readOutcome(value: string | null): Outcome | null {
-  if (value === null) {
-    return null;
-  }
-
-  if (!isOutcome(value)) {
-    throw new Error(`Unexpected outcome value in runs table: ${value}`);
-  }
-
-  return value;
-}
-
-function readShotResult(value: string): ShotResult {
-  if (!isShotResult(value)) {
-    throw new Error(`Unexpected shot result value in run_shots table: ${value}`);
-  }
-
-  return value;
-}
 
 export interface InsertRunArgs {
   id: string;
@@ -89,6 +60,9 @@ export interface FinalizeRunArgs {
   tokensOut: number;
   reasoningTokens: number | null;
   costUsdMicros: number;
+  terminalErrorCode?: string | null;
+  terminalErrorStatus?: number | null;
+  terminalErrorMessage?: string | null;
 }
 
 export interface Queries {
@@ -100,67 +74,6 @@ export interface Queries {
   getLeaderboard(scope: LeaderboardScope, seedDate: string): LeaderboardResponse;
   findStuckRunIds(): string[];
   markStuckRunsAborted(outcome: Outcome, endedAt: number): number;
-}
-
-interface LeaderboardRunRow {
-  id: string;
-  seedDate: string;
-  providerId: string;
-  modelId: string;
-  displayName: string;
-  reasoningEnabled: number;
-  shotsFired: number;
-  clientSession: string;
-  startedAt: number;
-}
-
-function median(values: readonly number[]): number {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-
-  if (sorted.length % 2 === 1) {
-    return sorted[middle] ?? 0;
-  }
-
-  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
-}
-
-function compareWins(left: LeaderboardRunRow, right: LeaderboardRunRow): number {
-  return (
-    left.shotsFired - right.shotsFired ||
-    left.startedAt - right.startedAt ||
-    left.id.localeCompare(right.id)
-  );
-}
-
-function dedupeBestWins(
-  rows: readonly LeaderboardRunRow[],
-  keyForRow: (row: LeaderboardRunRow) => string,
-): LeaderboardRunRow[] {
-  const bestByKey = new Map<string, LeaderboardRunRow>();
-
-  for (const row of rows) {
-    const key = keyForRow(row);
-    const current = bestByKey.get(key);
-
-    if (current === undefined || compareWins(row, current) < 0) {
-      bestByKey.set(key, row);
-    }
-  }
-
-  return [...bestByKey.values()];
-}
-
-function modelKey(row: LeaderboardRunRow): string {
-  return `${row.providerId}\0${row.modelId}\0${row.reasoningEnabled}`;
-}
-
-function rankRows(rows: readonly Omit<LeaderboardRow, "rank">[]): LeaderboardRow[] {
-  return rows.map((row, index) => ({ rank: index + 1, ...row }));
 }
 
 function leaderboardTodayRows(db: DatabaseHandle["db"], seedDate: string): LeaderboardRunRow[] {
@@ -233,85 +146,6 @@ function leaderboardAllRows(db: DatabaseHandle["db"]): LeaderboardRunRow[] {
   `);
 }
 
-function aggregateTodayLeaderboardRows(rows: readonly LeaderboardRunRow[]): LeaderboardRow[] {
-  const sessionBest = dedupeBestWins(rows, (row) =>
-    [row.clientSession, row.providerId, row.modelId, row.reasoningEnabled].join("\0"),
-  );
-  const byModel = new Map<string, LeaderboardRunRow[]>();
-
-  for (const row of sessionBest) {
-    const key = modelKey(row);
-    byModel.set(key, [...(byModel.get(key) ?? []), row]);
-  }
-
-  return rankRows(
-    [...byModel.values()]
-      .map((modelRows) => {
-        const best = dedupeBestWins(modelRows, modelKey).at(0);
-        if (best === undefined) {
-          throw new Error("Cannot aggregate empty leaderboard group");
-        }
-
-        return {
-          providerId: best.providerId,
-          modelId: best.modelId,
-          displayName: best.displayName,
-          reasoningEnabled: Boolean(best.reasoningEnabled),
-          shotsToWin: best.shotsFired,
-          runsCount: modelRows.length,
-          bestRunId: best.id,
-        };
-      })
-      .sort(
-        (left, right) =>
-          left.shotsToWin - right.shotsToWin ||
-          left.displayName.localeCompare(right.displayName) ||
-          left.providerId.localeCompare(right.providerId) ||
-          left.modelId.localeCompare(right.modelId),
-      ),
-  );
-}
-
-function aggregateAllLeaderboardRows(rows: readonly LeaderboardRunRow[]): LeaderboardRow[] {
-  const sessionSeedBest = dedupeBestWins(rows, (row) =>
-    [row.clientSession, row.providerId, row.modelId, row.reasoningEnabled, row.seedDate].join("\0"),
-  );
-  const byModel = new Map<string, LeaderboardRunRow[]>();
-
-  for (const row of sessionSeedBest) {
-    const key = modelKey(row);
-    byModel.set(key, [...(byModel.get(key) ?? []), row]);
-  }
-
-  return rankRows(
-    [...byModel.values()]
-      .map((modelRows) => {
-        const first = modelRows[0];
-        if (first === undefined) {
-          throw new Error("Cannot aggregate empty leaderboard group");
-        }
-
-        return {
-          providerId: first.providerId,
-          modelId: first.modelId,
-          displayName: first.displayName,
-          reasoningEnabled: Boolean(first.reasoningEnabled),
-          shotsToWin: median(modelRows.map((row) => row.shotsFired)),
-          runsCount: modelRows.length,
-          bestRunId: null,
-        };
-      })
-      .sort(
-        (left, right) =>
-          left.shotsToWin - right.shotsToWin ||
-          right.runsCount - left.runsCount ||
-          left.displayName.localeCompare(right.displayName) ||
-          left.providerId.localeCompare(right.providerId) ||
-          left.modelId.localeCompare(right.modelId),
-      ),
-  );
-}
-
 export function createQueries(db: DatabaseHandle["db"]): Queries {
   const findStuckRunIdsInternal = (): string[] => {
     return db
@@ -345,6 +179,9 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
           reasoningTokens: null,
           costUsdMicros: 0,
           budgetUsdMicros: args.budgetUsdMicros,
+          terminalErrorCode: null,
+          terminalErrorStatus: null,
+          terminalErrorMessage: null,
           clientSession: args.clientSession,
         })
         .run();
@@ -385,6 +222,9 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
           tokensOut: args.tokensOut,
           reasoningTokens: args.reasoningTokens,
           costUsdMicros: args.costUsdMicros,
+          terminalErrorCode: args.terminalErrorCode ?? null,
+          terminalErrorStatus: args.terminalErrorStatus ?? null,
+          terminalErrorMessage: args.terminalErrorMessage ?? null,
         })
         .where(eq(runs.id, args.id))
         .run();
@@ -396,27 +236,7 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
         return null;
       }
 
-      return {
-        id: row.id,
-        seedDate: row.seedDate,
-        providerId: row.providerId,
-        modelId: row.modelId,
-        displayName: row.displayName,
-        reasoningEnabled: row.reasoningEnabled,
-        startedAt: row.startedAt,
-        endedAt: row.endedAt,
-        outcome: readOutcome(row.outcome),
-        shotsFired: row.shotsFired,
-        hits: row.hits,
-        schemaErrors: row.schemaErrors,
-        invalidCoordinates: row.invalidCoordinates,
-        durationMs: row.durationMs,
-        tokensIn: row.tokensIn,
-        tokensOut: row.tokensOut,
-        reasoningTokens: row.reasoningTokens,
-        costUsdMicros: row.costUsdMicros,
-        budgetUsdMicros: row.budgetUsdMicros,
-      };
+      return mapRunMetaRow(row);
     },
 
     listShots(runId) {
@@ -426,22 +246,7 @@ export function createQueries(db: DatabaseHandle["db"]): Queries {
         .where(eq(runShots.runId, runId))
         .orderBy(runShots.idx)
         .all()
-        .map((row) => ({
-          runId: row.runId,
-          idx: row.idx,
-          row: row.row,
-          col: row.col,
-          result: readShotResult(row.result),
-          rawResponse: row.rawResponse,
-          reasoningText: row.reasoningText,
-          llmError: row.llmError,
-          tokensIn: row.tokensIn,
-          tokensOut: row.tokensOut,
-          reasoningTokens: row.reasoningTokens,
-          costUsdMicros: row.costUsdMicros,
-          durationMs: row.durationMs,
-          createdAt: row.createdAt,
-        }));
+        .map(mapRunShotRow);
     },
 
     getLeaderboard(scope, seedDate) {

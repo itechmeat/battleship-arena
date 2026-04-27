@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
+import { DEFAULT_BENCHMARK_SEED_DATE } from "@battleship-arena/shared";
 
 import { createLeaderboardRouter } from "../../src/api/leaderboard.ts";
 import { createQueries } from "../../src/db/queries.ts";
@@ -50,6 +51,35 @@ function insertCompletedRun(
 }
 
 describe("GET /api/leaderboard", () => {
+  test("today scope defaults to the fixed benchmark seed", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      insertCompletedRun(queries, {
+        id: "fixed-seed-run",
+        seedDate: DEFAULT_BENCHMARK_SEED_DATE,
+        providerId: "openrouter",
+        modelId: "fixed-model",
+        displayName: "Fixed Model",
+        clientSession: "session-1",
+        outcome: "won",
+        shotsFired: 22,
+        durationMs: 1000,
+        costUsdMicros: 10,
+      });
+
+      const app = new Hono();
+      app.route("/api", createLeaderboardRouter({ queries }));
+
+      const response = await app.request("/api/leaderboard?scope=today");
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.seedDate).toBe(DEFAULT_BENCHMARK_SEED_DATE);
+      expect(body.rows).toHaveLength(1);
+      expect(body.rows[0]).toMatchObject({ bestRunId: "fixed-seed-run" });
+    });
+  });
+
   test("missing scope rejects", async () => {
     await withTempDatabase(async ({ db }) => {
       const app = new Hono();
@@ -155,8 +185,8 @@ describe("GET /api/leaderboard", () => {
         id: "reasoning-off",
         seedDate: "2026-04-24",
         providerId: "openrouter",
-        modelId: "openai/gpt-5-nano",
-        displayName: "OpenAI: GPT-5 Nano",
+        modelId: "openai/gpt-5.4-nano",
+        displayName: "OpenAI: GPT-5.4 Nano",
         clientSession: "session-1",
         outcome: "won",
         shotsFired: 21,
@@ -168,8 +198,8 @@ describe("GET /api/leaderboard", () => {
         id: "reasoning-on",
         seedDate: "2026-04-24",
         providerId: "openrouter",
-        modelId: "openai/gpt-5-nano",
-        displayName: "OpenAI: GPT-5 Nano",
+        modelId: "openai/gpt-5.4-nano",
+        displayName: "OpenAI: GPT-5.4 Nano",
         clientSession: "session-1",
         outcome: "won",
         shotsFired: 19,
@@ -207,8 +237,8 @@ describe("GET /api/leaderboard", () => {
           id: `run-${seedDate}`,
           seedDate,
           providerId: "openrouter",
-          modelId: "openai/gpt-5-nano",
-          displayName: "OpenAI: GPT-5 Nano",
+          modelId: "openai/gpt-5.4-nano",
+          displayName: "OpenAI: GPT-5.4 Nano",
           clientSession: "session-1",
           outcome: "won",
           shotsFired: seedDate.endsWith("23") ? 17 : 19,

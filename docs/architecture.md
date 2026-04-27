@@ -156,7 +156,7 @@ graph LR
 ### 2.3 Shared package (`shared/`)
 
 - API request and response types, including the SSE event shapes.
-- The outcome enum (`won | dnf_shot_cap | dnf_schema_errors | dnf_budget | llm_unreachable | aborted_viewer | aborted_server_restart`).
+- The outcome enum (`won | dnf_shot_cap | dnf_schema_errors | dnf_budget | llm_unreachable | provider_rate_limited | aborted_viewer | aborted_server_restart`).
 - The closed-set error code enum.
 - The shot JSON validator (a pure function accepting canonical `cell` notation plus legacy row/col JSON).
 - Board constants (size, fleet composition, shot cap, schema-error threshold).
@@ -241,6 +241,7 @@ stateDiagram-v2
   running --> dnf_schema_errors: 5 consecutive schema_error/timeout rows
   running --> dnf_budget: cumulative cost exceeds user cap
   running --> llm_unreachable: provider non-retriable 4xx
+  running --> provider_rate_limited: provider 429 after retries
   running --> aborted_viewer: POST /api/runs/{id}/abort
   running --> aborted_server_restart: grace window elapsed or hard kill
   won --> [*]
@@ -248,11 +249,12 @@ stateDiagram-v2
   dnf_schema_errors --> [*]
   dnf_budget --> [*]
   llm_unreachable --> [*]
+  provider_rate_limited --> [*]
   aborted_viewer --> [*]
   aborted_server_restart --> [*]
 ```
 
-All seven terminal transitions are atomic writes to the `runs` row. Once the row has a non-null `outcome`, nothing in the system will mutate it again.
+All eight terminal transitions are atomic writes to the `runs` row. Once the row has a non-null `outcome`, nothing in the system will mutate it again.
 
 ## 4. Data stores
 

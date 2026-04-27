@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  DEFAULT_BENCHMARK_SEED_DATE,
   MOCK_TURN_DELAY_MS_DEFAULT,
   RING_CAPACITY,
   SCHEMA_ERROR_DNF_THRESHOLD,
@@ -8,6 +9,10 @@ import {
 } from "../src/constants.ts";
 
 describe("S2a constants", () => {
+  test("default benchmark seed is fixed", () => {
+    expect(DEFAULT_BENCHMARK_SEED_DATE).toBe("2026-04-21");
+  });
+
   test("ring capacity is 200", () => {
     expect(RING_CAPACITY).toBe(200);
   });

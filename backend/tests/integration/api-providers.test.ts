@@ -43,7 +43,10 @@ describe("GET /api/providers", () => {
     if (firstModel === undefined) {
       throw new Error("api-providers: openrouter.models is empty");
     }
-    const kimiModel = openrouter.models.find((model) => model.id === "moonshotai/kimi-k2.6");
+    const qwenModel = openrouter.models.find((model) => model.id === "qwen/qwen3.5-plus-20260420");
+    if (qwenModel === undefined) {
+      throw new Error("api-providers: qwen/qwen3.5-plus-20260420 entry missing");
+    }
     expect(firstModel).toEqual(
       expect.objectContaining({
         estimatedPromptTokens: expect.any(Number),
@@ -54,7 +57,7 @@ describe("GET /api/providers", () => {
           maxUsd: expect.any(Number),
         }),
         priceSource: expect.any(String),
-        lastReviewedAt: "2026-04-24",
+        lastReviewedAt: "2026-04-27",
       }),
     );
     expect(firstModel.pricing).toEqual(
@@ -63,12 +66,12 @@ describe("GET /api/providers", () => {
         outputUsdPerMtok: expect.any(Number),
       }),
     );
-    expect(kimiModel).toEqual(
+    expect(qwenModel).toEqual(
       expect.objectContaining({
-        displayName: "MoonshotAI: Kimi K2.6",
+        displayName: "Qwen: Qwen3.5 Plus 2026-04-20",
         hasReasoning: true,
         reasoningMode: "optional",
-        lastReviewedAt: "2026-04-24",
+        lastReviewedAt: "2026-04-27",
       }),
     );
     const zai = body.providers.find((provider) => provider.id === "zai");

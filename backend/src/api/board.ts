@@ -1,30 +1,19 @@
 import { Hono } from "hono";
 
-import { BOARD_SIZE, type BoardView } from "@battleship-arena/shared";
+import { BOARD_SIZE, DEFAULT_BENCHMARK_SEED_DATE, type BoardView } from "@battleship-arena/shared";
 
 import { renderBoardPng } from "../board/renderer.ts";
-import { respondError } from "../errors.ts";
 
 import { stableEtag } from "./cache.ts";
+import { respondInvalidInput } from "./responses.ts";
+import { isValidIsoDate } from "./validation.ts";
 
 interface BoardRouterOptions {
   todayUtc?: () => string;
 }
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function isValidDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) {
-    return false;
-  }
-
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function parseIfNoneMatchTokens(header: string | undefined): string[] {
@@ -67,21 +56,20 @@ export function createBoardRouter(options: BoardRouterOptions = {}) {
 
   router.get("/board", (context) => {
     const explicitDate = context.req.query("date");
-    const seedDate = explicitDate ?? readToday();
+    const seedDate = explicitDate ?? DEFAULT_BENCHMARK_SEED_DATE;
 
-    if (!isValidDate(seedDate)) {
-      return respondError(context, "invalid_input", 400, "Invalid input");
+    if (!isValidIsoDate(seedDate)) {
+      return respondInvalidInput(context);
     }
 
-    if (seedDate > readToday()) {
-      return respondError(context, "invalid_input", 400, "Invalid input", {
+    if (explicitDate !== undefined && seedDate > readToday()) {
+      return respondInvalidInput(context, {
         date: "future",
       });
     }
 
     const etag = stableEtag(`board:${seedDate}`);
-    const cacheControl =
-      explicitDate === undefined ? "no-cache, must-revalidate" : "public, max-age=86400, immutable";
+    const cacheControl = "public, max-age=86400, immutable";
 
     if (ifNoneMatchMatches(context.req.header("If-None-Match"), etag)) {
       return new Response(null, {

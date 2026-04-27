@@ -2,8 +2,8 @@ import type { ProviderCallInput } from "./types.ts";
 
 const COLUMN_LETTERS = "ABCDEFGHIJ";
 const BOARD_ROW_RE = /^(\d{2})\s+([.oXS]{10})$/;
-const TARGET_MAX_CANDIDATE_CELLS = 8;
-const HUNT_MAX_CANDIDATE_CELLS = 4;
+const TARGET_MAX_CANDIDATE_CELLS = 12;
+const HUNT_MAX_CANDIDATE_CELLS = 12;
 const NEIGHBOR_OFFSETS = [-1, 0, 1] as const;
 
 type BoardSymbol = "." | "o" | "X" | "S";

@@ -1,63 +1,36 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 
 import { getRun, getRunShots } from "../lib/api.ts";
+import { DYNAMIC_ROUTE_ID } from "../lib/page-shell.ts";
+import { resolveReplayRunIdFromPath } from "../lib/routes.ts";
 import BoardView from "./BoardView.tsx";
+import { createInitialReplayState, replayTickMs } from "./replayReducer.ts";
 import {
-  createInitialReplayState,
-  replayReducer,
-  replayTickMs,
-  type ReplaySpeed,
-  type ReplayAction,
-  type ReplayState,
-} from "./replayReducer.ts";
+  dispatchReplayAction,
+  nextReplaySpeed,
+  replayErrorMessage,
+  replayProgressPercent,
+  replayRun,
+  replayShots,
+} from "./replayViewModel.ts";
 import styles from "./ReplayPlayer.module.css";
 
 interface ReplayPlayerProps {
   runId: string;
 }
 
-function reduce(signal: () => ReplayState, setSignal: (value: ReplayState) => void) {
-  return (action: ReplayAction) => {
-    setSignal(replayReducer(signal(), action));
-  };
-}
-
 export function ReplayPlayer(props: ReplayPlayerProps) {
   const [runId, setRunId] = createSignal(props.runId);
   const [state, setState] = createSignal(createInitialReplayState());
-  const dispatch = reduce(state, setState);
+  const dispatch = dispatchReplayAction(state, setState);
   let timer: ReturnType<typeof setInterval> | undefined;
 
-  const run = createMemo(() => {
-    const current = state();
-    return current.status === "idle" || current.status === "playing" || current.status === "done"
-      ? current.run
-      : null;
-  });
-  const shots = createMemo(() => {
-    const current = state();
-    return current.status === "idle" || current.status === "playing" || current.status === "done"
-      ? current.shots
-      : [];
-  });
+  const run = createMemo(() => replayRun(state()));
+  const shots = createMemo(() => replayShots(state()));
   const visibleShots = createMemo(() => shots().slice(0, state().idx));
-  const progressPercent = createMemo(() =>
-    shots().length === 0 ? 0 : Math.round((state().idx / shots().length) * 100),
-  );
-  const errorMessage = createMemo(() => {
-    const current = state();
-    return current.status === "error" ? current.message : null;
-  });
-  const nextSpeed = createMemo<ReplaySpeed>(() => {
-    switch (state().speed) {
-      case 1:
-        return 2;
-      case 2:
-        return 4;
-      case 4:
-        return 1;
-    }
-  });
+  const progressPercent = createMemo(() => replayProgressPercent(state().idx, shots().length));
+  const errorMessage = createMemo(() => replayErrorMessage(state()));
+  const nextSpeed = createMemo(() => nextReplaySpeed(state().speed));
 
   const clearTimer = () => {
     if (timer !== undefined) {
@@ -81,9 +54,8 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
   });
 
   onMount(() => {
-    if (props.runId === "__dynamic__") {
-      const pathSegments = window.location.pathname.split("/").filter(Boolean);
-      const resolvedRunId = pathSegments.at(-1) === "replay" ? (pathSegments.at(-2) ?? "") : "";
+    if (props.runId === DYNAMIC_ROUTE_ID) {
+      const resolvedRunId = resolveReplayRunIdFromPath(window.location.pathname);
       if (resolvedRunId.length === 0) {
         window.location.assign("/");
         return;

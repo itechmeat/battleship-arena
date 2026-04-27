@@ -38,6 +38,9 @@ describe("S2a shared types", () => {
       reasoningTokens: null,
       costUsdMicros: 0,
       budgetUsdMicros: null,
+      terminalErrorCode: null,
+      terminalErrorStatus: null,
+      terminalErrorMessage: null,
     };
     const row: RunShotRow = {
       runId: "01",

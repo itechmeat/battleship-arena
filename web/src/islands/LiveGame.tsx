@@ -1,15 +1,24 @@
-import type { Outcome, RunMeta, RunShotRow } from "@battleship-arena/shared";
+import type { RunMeta, RunShotRow } from "@battleship-arena/shared";
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 
 import { abortRun, ApiError, getRun, getRunShots } from "../lib/api.ts";
+import { isAbortError, isApiStatus, resolveErrorMessage } from "../lib/errors.ts";
 import { formatUsdMicros } from "../lib/format.ts";
+import { DYNAMIC_ROUTE_ID } from "../lib/page-shell.ts";
+import { resolveLiveRunIdFromPath } from "../lib/routes.ts";
 import { subscribeToRun } from "../lib/sse.ts";
 import { deriveMetrics, formatDurationMs } from "./liveGameMetrics.ts";
+import {
+  appendShot,
+  mergeOutcome,
+  pageStateLabel,
+  shotFromSseEvent,
+  terminalErrorSummary,
+  type LiveGamePhase,
+} from "./liveRunState.ts";
 import styles from "./LiveGame.module.css";
 
 import BoardView from "./BoardView.tsx";
-
-type Phase = "loading" | "live" | "terminal" | "error" | "notFound";
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 
@@ -17,59 +26,9 @@ interface LiveGameProps {
   runId: string;
 }
 
-function appendShot(previous: readonly RunShotRow[], nextShot: RunShotRow): RunShotRow[] {
-  if (previous.some((shot) => shot.idx === nextShot.idx)) {
-    return previous as RunShotRow[];
-  }
-
-  return [...previous, nextShot].sort((left, right) => left.idx - right.idx);
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
-}
-
-function resolveErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiError) {
-    return error.envelope.error.message;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return fallback;
-}
-
-function isRunNotFound(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404;
-}
-
-function mergeOutcome(
-  meta: RunMeta,
-  outcome: {
-    outcome: Outcome;
-    endedAt: number;
-    shotsFired: number;
-    hits: number;
-    schemaErrors: number;
-    invalidCoordinates: number;
-  },
-): RunMeta {
-  return {
-    ...meta,
-    outcome: outcome.outcome,
-    endedAt: outcome.endedAt,
-    shotsFired: outcome.shotsFired,
-    hits: outcome.hits,
-    schemaErrors: outcome.schemaErrors,
-    invalidCoordinates: outcome.invalidCoordinates,
-  };
-}
-
 export function LiveGame(props: LiveGameProps) {
   const [runId, setRunId] = createSignal(props.runId);
-  const [phase, setPhase] = createSignal<Phase>("loading");
+  const [phase, setPhase] = createSignal<LiveGamePhase>("loading");
   const [meta, setMeta] = createSignal<RunMeta | null>(null);
   const [shots, setShots] = createSignal<RunShotRow[]>([]);
   const [nowMs, setNowMs] = createSignal(Date.now());
@@ -110,21 +69,9 @@ export function LiveGame(props: LiveGameProps) {
     const currentMeta = meta();
     return currentMeta?.displayName ?? "Loading run";
   });
-  const pageStateLabel = createMemo(() => {
-    switch (phase()) {
-      case "live":
-        return "In progress";
-      case "terminal":
-        return "Finished";
-      case "error":
-        return "Interrupted";
-      case "notFound":
-        return "Run not found";
-      case "loading":
-        return "Loading";
-    }
-  });
+  const currentPageStateLabel = createMemo(() => pageStateLabel(phase()));
   const reasoningStatus = createMemo(() => (meta()?.reasoningEnabled ? "On" : "Off"));
+  const currentTerminalErrorSummary = createMemo(() => terminalErrorSummary(meta()));
 
   const load = async () => {
     unsubscribe?.();
@@ -161,24 +108,7 @@ export function LiveGame(props: LiveGameProps) {
             case "open":
               return;
             case "shot":
-              setShots((previous) =>
-                appendShot(previous, {
-                  runId: runId(),
-                  idx: event.idx,
-                  row: event.row,
-                  col: event.col,
-                  result: event.result,
-                  rawResponse: "",
-                  reasoningText: event.reasoning,
-                  llmError: null,
-                  tokensIn: event.tokensIn ?? 0,
-                  tokensOut: event.tokensOut ?? 0,
-                  reasoningTokens: event.reasoningTokens ?? null,
-                  costUsdMicros: event.costUsdMicros ?? 0,
-                  durationMs: event.durationMs ?? 0,
-                  createdAt: event.createdAt ?? Date.now(),
-                }),
-              );
+              setShots((previous) => appendShot(previous, shotFromSseEvent(runId(), event)));
               return;
             case "outcome":
               setMeta((previous) => (previous === null ? previous : mergeOutcome(previous, event)));
@@ -208,7 +138,7 @@ export function LiveGame(props: LiveGameProps) {
         return;
       }
 
-      if (isRunNotFound(caughtError)) {
+      if (isApiStatus(caughtError, 404)) {
         setError(null);
         setPhase("notFound");
         return;
@@ -243,8 +173,8 @@ export function LiveGame(props: LiveGameProps) {
       setNowMs(Date.now());
     }, 1000);
 
-    if (props.runId === "__dynamic__") {
-      const resolvedRunId = window.location.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    if (props.runId === DYNAMIC_ROUTE_ID) {
+      const resolvedRunId = resolveLiveRunIdFromPath(window.location.pathname);
       if (resolvedRunId.length === 0) {
         window.location.assign("/play");
         return;
@@ -263,7 +193,7 @@ export function LiveGame(props: LiveGameProps) {
 
     const currentMeta = meta();
     const name = currentMeta?.displayName ?? `Run ${runId()}`;
-    document.title = `${pageStateLabel()}: ${name} | BattleShipArena`;
+    document.title = `${currentPageStateLabel()}: ${name} | BattleShipArena`;
   });
 
   onCleanup(() => {
@@ -337,6 +267,12 @@ export function LiveGame(props: LiveGameProps) {
               </Show>
             </div>
           </div>
+
+          <Show when={phase() === "terminal" && currentTerminalErrorSummary() !== null}>
+            <div class={styles.errorBlock} role="status">
+              <p class={styles.errorText}>{currentTerminalErrorSummary()}</p>
+            </div>
+          </Show>
 
           <div class={styles.boardWrap}>
             <BoardView shots={shots()} />

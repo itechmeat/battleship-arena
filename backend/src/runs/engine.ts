@@ -1,107 +1,53 @@
-import {
-  BOARD_SIZE,
-  parseShot,
-  type BoardView,
-  type CellState,
-  type Outcome,
-  type SseEvent,
-  type StartRunInput,
-} from "@battleship-arena/shared";
+import { type Outcome, type SseEvent, type StartRunInput } from "@battleship-arena/shared";
 
-import { generateBoard, type BoardLayout, type ShipPlacement } from "../board/generator.ts";
+import { generateBoard } from "../board/generator.ts";
 import { renderBoardText } from "../board/text-renderer.ts";
 // PNG renderer kept for the vision-based track. Disabled in this build; see
 // providers/openai-compatible.ts for the corresponding image_url message branch.
 // import { renderBoardPng } from "../board/renderer.ts";
 import type { Queries } from "../db/queries.ts";
-import { isProviderError, ProviderError } from "../providers/errors.ts";
+import { ProviderError } from "../providers/errors.ts";
 import type { ProviderAdapter } from "../providers/types.ts";
 
 import {
-  initialRunLoopState,
-  reduceOutcome,
-  type RunLoopEvent,
-  type RunLoopState,
-} from "./outcome.ts";
+  boardCoordinateKey,
+  buildBoardView,
+  shipsRemaining,
+  type LegalPriorShot,
+} from "./board-analysis.ts";
+import {
+  abortError,
+  isAbortError,
+  isNonRetriable4xx,
+  isProviderError,
+  isProviderRateLimit,
+  readAbortReason,
+  serializeProviderError,
+  terminalErrorFromProvider,
+} from "./error-handling.ts";
+import { initialRunLoopState, reduceOutcome, type RunLoopState } from "./outcome.ts";
 import { SYSTEM_PROMPT } from "./prompt.ts";
+import {
+  buildFinalizeRunArgs,
+  budgetUsdToMicros,
+  createAggregateTotals,
+  addProviderOutputTotals,
+  RAW_RESPONSE_LIMIT,
+  REASONING_TEXT_LIMIT,
+  truncateText,
+  type TerminalErrorFields,
+} from "./run-totals.ts";
+import { classifyShot } from "./shot-classifier.ts";
 
-const RAW_RESPONSE_LIMIT = 8 * 1024;
-const REASONING_TEXT_LIMIT = 2 * 1024;
 const DEFAULT_TURN_TIMEOUT_MS = 60_000;
-type ShotRunLoopEvent = Exclude<RunLoopEvent, { kind: "abort" }>;
 
 type Awaitable<T> = T | Promise<T>;
-
-interface LegalPriorShot {
-  row: number;
-  col: number;
-  result: "hit" | "miss" | "sunk";
-}
-
-interface AggregateTotals {
-  tokensIn: number;
-  tokensOut: number;
-  reasoningTokens: number | null;
-}
 
 export interface RunEngineDeps {
   queries: Queries;
   provider: ProviderAdapter;
   now?: () => number;
   turnTimeoutMs?: number;
-}
-
-function truncateText(text: string, limit: number): string {
-  return text.length <= limit ? text : text.slice(0, limit);
-}
-
-function keyFor(row: number, col: number): string {
-  return `${row}:${col}`;
-}
-
-function isAbortError(error: unknown): error is DOMException {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isNonRetriable4xx(error: unknown): boolean {
-  if (!isObjectRecord(error) || typeof error.status !== "number") {
-    return false;
-  }
-
-  return error.status >= 400 && error.status < 500 && error.status !== 429;
-}
-
-function readAbortReason(signal: AbortSignal): "viewer" | "server_restart" {
-  const reason = signal.reason;
-  if (isObjectRecord(reason) && reason.reason === "server_restart") {
-    return "server_restart";
-  }
-
-  return "viewer";
-}
-
-function budgetUsdToMicros(budgetUsd: number | undefined): number | null {
-  return budgetUsd === undefined ? null : Math.floor(budgetUsd * 1_000_000);
-}
-
-function addReasoningTokens(current: number | null, next: number | null): number | null {
-  if (current === null && next === null) {
-    return null;
-  }
-
-  return (current ?? 0) + (next ?? 0);
-}
-
-function serializeProviderError(error: { cause: string }): string {
-  return truncateText(error.cause, REASONING_TEXT_LIMIT);
-}
-
-function abortError(): DOMException {
-  return new DOMException("Aborted", "AbortError");
 }
 
 async function withTurnTimeout<T>(
@@ -163,157 +109,6 @@ async function withTurnTimeout<T>(
   }
 }
 
-function buildBoardView(
-  layout: BoardLayout,
-  legalPriorShots: readonly LegalPriorShot[],
-): BoardView {
-  const cells: CellState[] = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, () => "unknown");
-  const hitKeys = new Set(
-    legalPriorShots
-      .filter((shot) => shot.result === "hit" || shot.result === "sunk")
-      .map((shot) => keyFor(shot.row, shot.col)),
-  );
-  const missShots = legalPriorShots.filter((shot) => shot.result === "miss");
-  const sunkShipKeys = new Set<string>();
-
-  for (const ship of layout.ships) {
-    const isSunk = ship.cells.every((cell) => hitKeys.has(keyFor(cell.row, cell.col)));
-    if (!isSunk) {
-      continue;
-    }
-
-    ship.cells.forEach((cell) => {
-      sunkShipKeys.add(keyFor(cell.row, cell.col));
-    });
-  }
-
-  for (const shot of missShots) {
-    cells[shot.row * BOARD_SIZE + shot.col] = "miss";
-  }
-
-  for (const ship of layout.ships) {
-    for (const cell of ship.cells) {
-      const index = cell.row * BOARD_SIZE + cell.col;
-      const key = keyFor(cell.row, cell.col);
-
-      if (sunkShipKeys.has(key)) {
-        cells[index] = "sunk";
-        continue;
-      }
-
-      if (hitKeys.has(key)) {
-        cells[index] = "hit";
-      }
-    }
-  }
-
-  return { size: 10, cells };
-}
-
-function shipsRemaining(layout: BoardLayout, legalPriorShots: readonly LegalPriorShot[]): string[] {
-  const hitKeys = new Set(
-    legalPriorShots
-      .filter((shot) => shot.result === "hit" || shot.result === "sunk")
-      .map((shot) => keyFor(shot.row, shot.col)),
-  );
-
-  return layout.ships
-    .filter((ship) => !ship.cells.every((cell) => hitKeys.has(keyFor(cell.row, cell.col))))
-    .map((ship) => ship.name);
-}
-
-function findShipAt(layout: BoardLayout, row: number, col: number): ShipPlacement | undefined {
-  return layout.ships.find((ship) =>
-    ship.cells.some((cell) => cell.row === row && cell.col === col),
-  );
-}
-
-function classifyShot(
-  layout: BoardLayout,
-  legalPriorShots: readonly LegalPriorShot[],
-  seenCoordinates: ReadonlySet<string>,
-  rawText: string,
-): {
-  row: number | null;
-  col: number | null;
-  result: "hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate";
-  reasoningText: string | null;
-  event: ShotRunLoopEvent;
-  legalShot: LegalPriorShot | null;
-} {
-  const parsed = parseShot(rawText);
-
-  if (parsed.kind === "schema_error") {
-    return {
-      row: null,
-      col: null,
-      result: "schema_error",
-      reasoningText: null,
-      event: { kind: "schema_error" },
-      legalShot: null,
-    };
-  }
-
-  if (parsed.kind === "invalid_coordinate") {
-    return {
-      row: null,
-      col: null,
-      result: "invalid_coordinate",
-      reasoningText: null,
-      event: { kind: "invalid_coordinate" },
-      legalShot: null,
-    };
-  }
-
-  const reasoningText = parsed.shot.reasoning ?? null;
-  const row = parsed.shot.row;
-  const col = parsed.shot.col;
-  const coordinateKey = keyFor(row, col);
-
-  if (seenCoordinates.has(coordinateKey)) {
-    return {
-      row,
-      col,
-      result: "invalid_coordinate",
-      reasoningText,
-      event: { kind: "invalid_coordinate" },
-      legalShot: null,
-    };
-  }
-
-  const ship = findShipAt(layout, row, col);
-  if (ship === undefined) {
-    return {
-      row,
-      col,
-      result: "miss",
-      reasoningText,
-      event: { kind: "miss" },
-      legalShot: { row, col, result: "miss" },
-    };
-  }
-
-  const hitKeys = new Set(
-    legalPriorShots
-      .filter((shot) => shot.result === "hit" || shot.result === "sunk")
-      .map((shot) => keyFor(shot.row, shot.col)),
-  );
-  const sinksShip = ship.cells.every((cell) => {
-    const cellKey = keyFor(cell.row, cell.col);
-    return cellKey === coordinateKey || hitKeys.has(cellKey);
-  });
-  const result = sinksShip ? "sunk" : "hit";
-
-  return {
-    row,
-    col,
-    result,
-    reasoningText,
-    event: { kind: result },
-    legalShot: { row, col, result },
-  };
-}
-
 export async function runEngine(
   runId: string,
   input: StartRunInput,
@@ -353,30 +148,27 @@ export async function runEngine(
   });
 
   let state: RunLoopState = initialRunLoopState();
-  const totals: AggregateTotals = {
-    tokensIn: 0,
-    tokensOut: 0,
-    reasoningTokens: null,
-  };
+  const totals = createAggregateTotals();
   const legalPriorShots: LegalPriorShot[] = [];
   const seenCoordinates = new Set<string>();
   let shotIndex = 0;
 
-  const finalize = async (outcome: Outcome, endedAt: number): Promise<Outcome> => {
-    deps.queries.finalizeRun({
-      id: runId,
-      endedAt,
-      outcome,
-      shotsFired: state.shotsFired,
-      hits: state.hits,
-      schemaErrors: state.schemaErrors,
-      invalidCoordinates: state.invalidCoordinates,
-      durationMs: endedAt - startedAt,
-      tokensIn: totals.tokensIn,
-      tokensOut: totals.tokensOut,
-      reasoningTokens: totals.reasoningTokens,
-      costUsdMicros: state.accumulatedCostMicros,
-    });
+  const finalize = async (
+    outcome: Outcome,
+    endedAt: number,
+    terminalError?: TerminalErrorFields,
+  ): Promise<Outcome> => {
+    deps.queries.finalizeRun(
+      buildFinalizeRunArgs({
+        runId,
+        startedAt,
+        endedAt,
+        outcome,
+        state,
+        totals,
+        ...(terminalError === undefined ? {} : { terminalError }),
+      }),
+    );
 
     await emit({
       kind: "outcome",
@@ -419,12 +211,7 @@ export async function runEngine(
           ),
       );
 
-      totals.tokensIn += providerOutput.tokensIn;
-      totals.tokensOut += providerOutput.tokensOut;
-      totals.reasoningTokens = addReasoningTokens(
-        totals.reasoningTokens,
-        providerOutput.reasoningTokens,
-      );
+      addProviderOutputTotals(totals, providerOutput);
       const classified = classifyShot(
         layout,
         legalPriorShots,
@@ -474,7 +261,7 @@ export async function runEngine(
       shotIndex += 1;
 
       if (classified.row !== null && classified.col !== null) {
-        seenCoordinates.add(keyFor(classified.row, classified.col));
+        seenCoordinates.add(boardCoordinateKey(classified.row, classified.col));
       }
 
       if (classified.legalShot !== null) {
@@ -505,8 +292,12 @@ export async function runEngine(
       }
 
       if (isProviderError(error)) {
+        if (isProviderRateLimit(error)) {
+          return await finalize("provider_rate_limited", now(), terminalErrorFromProvider(error));
+        }
+
         if (error.kind === "unreachable") {
-          return await finalize("llm_unreachable", now());
+          return await finalize("llm_unreachable", now(), terminalErrorFromProvider(error));
         }
 
         const createdAt = now();

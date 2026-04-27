@@ -46,12 +46,17 @@ The shared HTTP client module SHALL apply the `500 ms / 1500 ms / 4500 ms` backo
 
 ### Requirement: OpenRouter adapter targets chat completions with OpenAI-compatible body shape
 
-The OpenRouter adapter SHALL issue a `POST` to the OpenRouter chat-completions endpoint with an OpenAI-compatible JSON body (`model`, `messages`, `temperature: 0`, `verbosity: "low"`, `max_tokens`, and `response_format: { type: "json_object" }`). The active request MUST send the shared text-board prompt as a plain user message and MUST NOT include an image content block. For reasoning models it MUST include `reasoning: { effort: "minimal", exclude: true }`. It MUST place the API key in the `Authorization: Bearer <key>` header. It MUST strip any reasoning or thinking blocks from the assistant message before populating `rawText`. It MUST parse `usage.prompt_tokens` and `usage.completion_tokens` into `tokensIn` and `tokensOut`, and `usage.completion_tokens_details.reasoning_tokens` (or the provider's equivalent) into `reasoningTokens` when present.
+The OpenRouter adapter SHALL issue a `POST` to the OpenRouter chat-completions endpoint with an OpenAI-compatible JSON body (`model`, `messages`, `temperature: 0`, and `max_tokens`). The active request MUST send the shared text-board prompt as a plain user message and MUST NOT include an image content block. For reasoning models it MUST include `reasoning: { effort: "minimal", exclude: true }`. The adapter MUST NOT send `verbosity` because the curated OpenRouter model catalog does not advertise that parameter through `supported_parameters`. It MUST send `response_format: { type: "json_object" }` only for catalog entries that support it and omit it for entries whose OpenRouter metadata does not list `response_format`. It MUST place the API key in the `Authorization: Bearer <key>` header. It MUST strip any reasoning or thinking blocks from the assistant message before populating `rawText`. It MUST parse `usage.prompt_tokens` and `usage.completion_tokens` into `tokensIn` and `tokensOut`, and `usage.completion_tokens_details.reasoning_tokens` (or the provider's equivalent) into `reasoningTokens` when present.
 
 #### Scenario: Request shape and auth header
 
 - **WHEN** the adapter is called against a canned `fetch` and a valid input
-- **THEN** the recorded request URL contains `openrouter.ai/api/v1/chat/completions`, the method is `POST`, the JSON body carries `model`, `messages`, `verbosity: "low"`, and no `image_url` content block, and the `authorization` header equals `Bearer <test-key>` verbatim
+- **THEN** the recorded request URL contains `openrouter.ai/api/v1/chat/completions`, the method is `POST`, the JSON body carries `model`, `messages`, and no `image_url` or `verbosity` field, and the `authorization` header equals `Bearer <test-key>` verbatim
+
+#### Scenario: Model-specific unsupported response_format is omitted
+
+- **WHEN** the OpenRouter adapter is called for a catalog entry whose live OpenRouter metadata does not list `response_format`
+- **THEN** the JSON body omits `response_format` while preserving the normal text-board prompt and reasoning fields when that model supports reasoning
 
 #### Scenario: Reasoning stripped from rawText, tokens preserved
 
@@ -98,7 +103,7 @@ The zai adapter SHALL issue a `POST` to `https://api.z.ai/api/coding/paas/v4/cha
 
 ### Requirement: Adapters surface a ProviderError discriminated union on failure
 
-Each real adapter SHALL throw `ProviderError` (as defined in `shared-contract`) with `kind: "transient"` when the HTTP client raises `TransientFailure` and `kind: "unreachable"` when the HTTP client raises `NonRetriable4xx` or the upstream is network-unreachable. The thrown value's `cause` MUST be a non-empty string (matching the `cause: string` field in the shared `ProviderError` type) that describes the originating failure well enough for an operator to diagnose it (for example: `"503 upstream"`, `"timeout after 4500ms"`, `"401 unauthorized"`). For `kind: "unreachable"` the thrown value MUST also carry `status: number` equal to the upstream HTTP status. The adapter MUST NOT embed a live `Response` object, a `Headers` instance, the original thrown `Error`, or any non-string structure into `cause`. The engine branches on `kind` per `docs/spec.md` section 6.5: ordinary `transient` errors become `schema_error` turns, the engine's own per-turn timeout becomes a `timeout` turn, and `unreachable` becomes the `llm_unreachable` terminal outcome.
+Each real adapter SHALL throw `ProviderError` (as defined in `shared-contract`) with `kind: "transient"` when the HTTP client raises an ordinary non-429 `TransientFailure` and `kind: "unreachable"` when the HTTP client raises `NonRetriable4xx`, an exhausted 429 retry sequence, or another caller-side provider rejection. Exhausted 429 failures MUST carry `code: "rate_limited"` and `status: 429`. Non-429 provider rejections MUST classify by both HTTP status and upstream body text: 401 remains `code: "auth"`, 402 maps to `code: "quota"`, and body text indicating quota, balance, billing, insufficient credits, or key-limit exhaustion (for example OpenRouter's `Key limit exceeded (total limit)`) MUST map to `code: "quota"` even when the HTTP status is 403. Body-text classification MUST use case-insensitive substring matching against sanitized upstream text; if multiple quota indicators match, quota classification wins over generic malformed-response classification. The thrown value's `cause` MUST be a non-empty string (matching the `cause: string` field in the shared `ProviderError` type) that describes the originating failure well enough for an operator to diagnose it (for example: `"503 upstream"`, `"timeout after 4500ms"`, `"401 unauthorized"`, `"403 upstream: Key limit exceeded"`, or `"429 upstream: Rate limit exceeded"`). For `kind: "unreachable"` the thrown value MUST also carry `status: number` equal to the upstream HTTP status. The adapter MUST NOT embed a live `Response` object, a `Headers` instance, the original thrown `Error`, or any non-string structure into `cause`. The engine branches on `kind` and `code` per `docs/spec.md` section 6.5: ordinary `transient` errors become `schema_error` turns, the engine's own per-turn timeout becomes a `timeout` turn, `rate_limited` becomes the `provider_rate_limited` terminal outcome, and other `unreachable` errors become the `llm_unreachable` terminal outcome.
 
 #### Scenario: TransientFailure becomes ProviderError transient with a descriptive string cause
 
@@ -109,6 +114,11 @@ Each real adapter SHALL throw `ProviderError` (as defined in `shared-contract`) 
 
 - **WHEN** the HTTP client raises `NonRetriable4xx` on a `401`
 - **THEN** the adapter throws `ProviderError` with `kind === "unreachable"`, `status === 401`, and `cause` is a non-empty string referencing the `401`
+
+#### Scenario: OpenRouter key limit is classified as quota
+
+- **WHEN** OpenRouter responds with `403` and a body containing `Key limit exceeded (total limit)`
+- **THEN** the adapter throws `ProviderError` with `kind === "unreachable"`, `code === "quota"`, `status === 403`, and a `cause` containing the upstream message with API keys and sensitive tokens removed
 
 #### Scenario: cause never carries a live Response or Error instance
 

@@ -10,6 +10,8 @@ export const FLEET = [
 
 export const TOTAL_SHIP_CELLS = FLEET.reduce((acc, ship) => acc + ship.length, 0);
 
+export const DEFAULT_BENCHMARK_SEED_DATE = "2026-04-21";
+
 export const SHOT_CAP = 100;
 
 export const SCHEMA_ERROR_DNF_THRESHOLD = 5;

@@ -348,6 +348,42 @@ describe("OpenCode Go adapter", () => {
     ).rejects.toBeInstanceOf(ProviderError);
   });
 
+  test("translates exhausted messages-endpoint 429 responses to rate-limited ProviderError", async () => {
+    let attempts = 0;
+    const fetch = (async () => {
+      attempts += 1;
+      return new Response("requests-per-window exceeded", {
+        status: 429,
+        headers: { "Retry-After": "0" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+    const adapter = createOpenCodeGoAdapter({
+      fetch,
+      pricing: pricingWithDeepSeekMessagesEndpoint(),
+    });
+
+    await expect(
+      adapter.call(
+        {
+          modelId: "opencode-go/deepseek-v4-flash",
+          apiKey: "ocg-test",
+          boardText: "   ABCDEFGHIJ\n01 ..........",
+          shipsRemaining: ["Destroyer"],
+          systemPrompt: "Return JSON.",
+          priorShots: [],
+          seedDate: "2026-04-24",
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      kind: "unreachable",
+      code: "rate_limited",
+      status: 429,
+      cause: expect.stringContaining("requests-per-window exceeded"),
+    });
+    expect(attempts).toBe(3);
+  });
+
   test("does not leak sentinel API keys into output or console logs", async () => {
     const sentinelKey = "sk-sentinel-opencode-secret";
     const consoleCalls: string[] = [];

@@ -24,6 +24,9 @@ export const runs = sqliteTable(
     reasoningTokens: integer("reasoning_tokens"),
     costUsdMicros: integer("cost_usd_micros").notNull(),
     budgetUsdMicros: integer("budget_usd_micros"),
+    terminalErrorCode: text("terminal_error_code"),
+    terminalErrorStatus: integer("terminal_error_status"),
+    terminalErrorMessage: text("terminal_error_message"),
     clientSession: text("client_session").notNull(),
   },
   (table) => [

@@ -1,21 +1,18 @@
 ---
+import BaseHead from "../components/BaseHead.astro";
+import ServiceWorkerScript from "../components/ServiceWorkerScript.astro";
 import StartRunForm from "../islands/StartRunForm.tsx";
-
-const shouldRegisterServiceWorker = import.meta.env.PROD;
+import { APP_FONT_STACK } from "../lib/page-shell.ts";
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f766e" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Play | BattleShipArena</title>
-    <style is:global>
+    <BaseHead title="Play | BattleShipArena" />
+    <style is:global define:vars={{ appFontStack: APP_FONT_STACK }}>
       :root {
         color-scheme: light;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-family: var(--appFontStack);
         background:
           radial-gradient(circle at top, rgba(15, 118, 110, 0.14), transparent 38%),
           linear-gradient(180deg, #ecfeff 0%, #fffdf7 48%, #f8fafc 100%);
@@ -30,14 +27,6 @@ const shouldRegisterServiceWorker = import.meta.env.PROD;
   <body>
     <StartRunForm client:load />
 
-    <script is:inline define:vars={{ shouldRegisterServiceWorker }}>
-      if (shouldRegisterServiceWorker) {
-        window.addEventListener("load", () => {
-          if ("serviceWorker" in navigator) {
-            void navigator.serviceWorker.register("/sw.js");
-          }
-        });
-      }
-    </script>
+    <ServiceWorkerScript />
   </body>
 </html>

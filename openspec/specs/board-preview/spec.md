@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Specifies the public `GET /api/board` endpoint that returns the day's empty Battleship board as a PNG. The endpoint powers the home-page preview, archived-run replays that want to display the seed's visual starting state, and external verifiability ("show me today's board without running a game"). Scope: past or present UTC seeds only; malformed and future dates reject with `invalid_input`. Cache discipline is explicit so past-date PNGs stay immutably cacheable and today's PNG cannot go stale across UTC rollover.
+Specifies the public `GET /api/board` endpoint that returns the fixed default benchmark Battleship board as a PNG, or an explicit custom seed board when `date` is provided. The endpoint powers the home-page preview, archived-run replays that want to display the seed's visual starting state, and external verifiability. Scope: past or present UTC seeds only for explicit dates; malformed and explicit future dates reject with `invalid_input`. The absent-date fixed default seed is always allowed. Cache discipline is explicit because the default benchmark seed is fixed.
 
 ## Requirements
 
 ### Requirement: GET /api/board?date=YYYY-MM-DD returns the PNG for any past or present UTC seed
 
-`GET /api/board` SHALL accept an optional `date` query parameter in `YYYY-MM-DD` form. Past and present UTC seeds MUST return `200` with `Content-Type: image/png` and a non-empty body produced by the `board/generator` and `board/renderer` modules with an empty shots list. An absent `date` MUST be treated as today's UTC date.
+`GET /api/board` SHALL accept an optional `date` query parameter in `YYYY-MM-DD` form. Past and present UTC seeds MUST return `200` with `Content-Type: image/png` and a non-empty body produced by the `board/generator` and `board/renderer` modules with an empty shots list. An absent `date` MUST be treated as the fixed default benchmark seed (`2026-04-21`) and MUST NOT be rejected by explicit future-date validation.
 
 #### Scenario: Past date returns 200 image/png
 
@@ -20,14 +20,14 @@ Specifies the public `GET /api/board` endpoint that returns the day's empty Batt
 - **WHEN** a client issues `GET /api/board?date=2026-04-20` twice
 - **THEN** the two response bodies are byte-identical
 
-#### Scenario: Absent date maps to today
+#### Scenario: Absent date maps to the default benchmark seed
 
 - **WHEN** a client issues `GET /api/board` with no query parameters
-- **THEN** the response is a `200 image/png` generated against today's UTC seed
+- **THEN** the response is a `200 image/png` generated against the fixed default benchmark seed
 
 ### Requirement: Future dates reject with invalid_input
 
-`GET /api/board` SHALL reject any `date` strictly greater than the current UTC date with `400 { code: "invalid_input", detail: { date: "future" } }`. The board generator MUST NOT be invoked for future dates.
+`GET /api/board` SHALL reject any explicit `date` strictly greater than the current UTC date with `400 { code: "invalid_input", detail: { date: "future" } }`. The board generator MUST NOT be invoked for explicit future dates.
 
 #### Scenario: Future date rejects
 
@@ -48,23 +48,14 @@ Specifies the public `GET /api/board` endpoint that returns the day's empty Batt
 - **WHEN** a client issues `GET /api/board?date=2026-13-40` with a spy installed on the generator
 - **THEN** the spy records zero calls
 
-### Requirement: Explicit date responses are Cache-Control public, max-age=86400, immutable
+### Requirement: Board responses are Cache-Control public, max-age=86400, immutable
 
-`GET /api/board?date=<past-or-today>` with an explicit `date` parameter SHALL attach `Cache-Control: public, max-age=86400, immutable` to the `200` response.
+`GET /api/board` and `GET /api/board?date=<past-or-today>` SHALL attach `Cache-Control: public, max-age=86400, immutable` to the `200` response.
 
-#### Scenario: Explicit-date cache header
+#### Scenario: Cache header
 
 - **WHEN** a client issues `GET /api/board?date=2026-04-20`
 - **THEN** the response carries `Cache-Control: public, max-age=86400, immutable`
-
-### Requirement: Absent-date responses are Cache-Control no-cache, must-revalidate
-
-`GET /api/board` without a `date` parameter SHALL attach `Cache-Control: no-cache, must-revalidate` so clients re-validate across UTC rollover.
-
-#### Scenario: No-date cache header
-
-- **WHEN** a client issues `GET /api/board`
-- **THEN** the response carries `Cache-Control: no-cache, must-revalidate`
 
 ### Requirement: ETag is deterministic per seed date and supports 304
 

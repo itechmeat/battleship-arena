@@ -4,6 +4,7 @@ export const OUTCOMES = [
   "dnf_schema_errors",
   "dnf_budget",
   "llm_unreachable",
+  "provider_rate_limited",
   "aborted_viewer",
   "aborted_server_restart",
 ] as const;

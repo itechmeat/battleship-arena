@@ -1,12 +1,14 @@
 ---
+import BaseHead from "../../components/BaseHead.astro";
+import ServiceWorkerScript from "../../components/ServiceWorkerScript.astro";
 import LiveGame from "../../islands/LiveGame.tsx";
+import { APP_FONT_STACK, DYNAMIC_ROUTE_ID } from "../../lib/page-shell.ts";
 
-const shouldRegisterServiceWorker = import.meta.env.PROD;
-const runId = Astro.params.id ?? "__dynamic__";
-const pageTitle = runId === "__dynamic__" ? "Live run" : `Run ${runId}`;
+const runId = Astro.params.id ?? DYNAMIC_ROUTE_ID;
+const pageTitle = runId === DYNAMIC_ROUTE_ID ? "Live run" : `Run ${runId}`;
 
 export function getStaticPaths() {
-  return [{ params: { id: "__dynamic__" } }];
+  return [{ params: { id: DYNAMIC_ROUTE_ID } }];
 }
 
 ---
@@ -14,15 +16,11 @@ export function getStaticPaths() {
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f766e" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <title>{pageTitle} | BattleShipArena</title>
-    <style is:global>
+    <BaseHead title={`${pageTitle} | BattleShipArena`} />
+    <style is:global define:vars={{ appFontStack: APP_FONT_STACK }}>
       :root {
         color-scheme: light;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-family: var(--appFontStack);
         background:
           radial-gradient(circle at top, rgba(15, 118, 110, 0.14), transparent 38%),
           linear-gradient(180deg, #ecfeff 0%, #fffdf7 48%, #f8fafc 100%);
@@ -37,14 +35,6 @@ export function getStaticPaths() {
   <body>
     <LiveGame runId={runId} client:load />
 
-    <script is:inline define:vars={{ shouldRegisterServiceWorker }}>
-      if (shouldRegisterServiceWorker) {
-        window.addEventListener("load", () => {
-          if ("serviceWorker" in navigator) {
-            void navigator.serviceWorker.register("/sw.js");
-          }
-        });
-      }
-    </script>
+    <ServiceWorkerScript />
   </body>
 </html>

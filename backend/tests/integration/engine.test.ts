@@ -250,7 +250,7 @@ describe("runEngine", () => {
         tokensOut: 0,
         costUsdMicros: 0,
       });
-      expect(shots[0]?.llmError).toBe("upstream failed with [redacted]");
+      expect(shots[0]?.llmError).toBe("upstream failed with [REDACTED]");
       expect(shots[0]?.llmError).not.toContain("sk-secret");
     });
   }, 30_000);
@@ -315,6 +315,42 @@ describe("runEngine", () => {
     });
   });
 
+  test("rate-limited ProviderError finalizes provider_rate_limited without a shot row", async () => {
+    await withTempDatabase(async ({ db }) => {
+      const queries = createQueries(db);
+      const provider = createMockProvider({
+        delayMs: 0,
+        failure: new ProviderError({
+          kind: "unreachable",
+          code: "rate_limited",
+          providerId: "mock",
+          message: "Provider rate limit reached",
+          status: 429,
+          cause: "429 upstream: Rate limit exceeded",
+        }),
+      });
+
+      const outcome = await runEngine(
+        "run-1",
+        baseInput("mock-happy"),
+        new AbortController().signal,
+        () => {},
+        { queries, provider },
+      );
+
+      const meta = queries.getRunMeta("run-1");
+
+      expect(outcome).toBe("provider_rate_limited");
+      expect(meta?.outcome).toBe("provider_rate_limited");
+      expect(meta?.terminalErrorCode).toBe("rate_limited");
+      expect(meta?.terminalErrorStatus).toBe(429);
+      expect(meta?.terminalErrorMessage).toContain("Rate limit exceeded");
+      expect(meta?.schemaErrors).toBe(0);
+      expect(meta?.shotsFired).toBe(0);
+      expect(queries.listShots("run-1")).toEqual([]);
+    });
+  });
+
   test("unreachable ProviderError finalizes llm_unreachable without a shot row", async () => {
     await withTempDatabase(async ({ db }) => {
       const queries = createQueries(db);
@@ -341,6 +377,9 @@ describe("runEngine", () => {
       const meta = queries.getRunMeta("run-1");
 
       expect(outcome).toBe("llm_unreachable");
+      expect(meta?.terminalErrorCode).toBe("auth");
+      expect(meta?.terminalErrorStatus).toBe(401);
+      expect(meta?.terminalErrorMessage).toBe("401 unauthorized");
       expect(meta?.schemaErrors).toBe(0);
       expect(meta?.shotsFired).toBe(0);
       expect(queries.listShots("run-1")).toEqual([]);

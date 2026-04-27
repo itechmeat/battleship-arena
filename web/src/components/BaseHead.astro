@@ -1,0 +1,15 @@
+---
+import { THEME_COLOR } from "../lib/page-shell.ts";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content={THEME_COLOR} />
+<link rel="manifest" href="/manifest.webmanifest" />
+<title>{title}</title>

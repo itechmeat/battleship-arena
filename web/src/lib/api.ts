@@ -8,6 +8,15 @@ import type {
   RunShotRow,
 } from "@battleship-arena/shared";
 
+import {
+  abortRunPath,
+  leaderboardPath,
+  providersPath,
+  runPath,
+  runsPath,
+  runShotsPath,
+} from "./api-routes.ts";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -83,7 +92,7 @@ export interface AbortRunResponse {
 }
 
 export function startRun(payload: StartRunPayload): Promise<StartRunResponse> {
-  return request<StartRunResponse>("/api/runs", {
+  return request<StartRunResponse>(runsPath(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -93,10 +102,7 @@ export function startRun(payload: StartRunPayload): Promise<StartRunResponse> {
 }
 
 export function getProviders(signal?: AbortSignal): Promise<ProvidersResponse> {
-  return request<ProvidersResponse>(
-    "/api/providers",
-    signal === undefined ? undefined : { signal },
-  );
+  return request<ProvidersResponse>(providersPath(), signal === undefined ? undefined : { signal });
 }
 
 export interface GetLeaderboardOptions {
@@ -110,39 +116,26 @@ export function getLeaderboard(
   scope: LeaderboardScope = "today",
   options: GetLeaderboardOptions = {},
 ): Promise<LeaderboardResponse> {
-  const search = new URLSearchParams({ scope });
-  if (options.providerId !== undefined && options.providerId.length > 0) {
-    search.set("providerId", options.providerId);
-  }
-  if (options.modelId !== undefined && options.modelId.length > 0) {
-    search.set("modelId", options.modelId);
-  }
-  if (options.reasoningEnabled !== undefined) {
-    search.set("reasoningEnabled", String(options.reasoningEnabled));
-  }
-
+  const { signal, ...routeOptions } = options;
   return request<LeaderboardResponse>(
-    `/api/leaderboard?${search.toString()}`,
-    options.signal === undefined ? undefined : { signal: options.signal },
-  );
-}
-
-export function getRun(runId: string, signal?: AbortSignal): Promise<RunMeta> {
-  return request<RunMeta>(
-    `/api/runs/${encodeURIComponent(runId)}`,
+    leaderboardPath(scope, routeOptions),
     signal === undefined ? undefined : { signal },
   );
 }
 
+export function getRun(runId: string, signal?: AbortSignal): Promise<RunMeta> {
+  return request<RunMeta>(runPath(runId), signal === undefined ? undefined : { signal });
+}
+
 export function getRunShots(runId: string, signal?: AbortSignal): Promise<RunShotsResponse> {
   return request<RunShotsResponse>(
-    `/api/runs/${encodeURIComponent(runId)}/shots`,
+    runShotsPath(runId),
     signal === undefined ? undefined : { signal },
   );
 }
 
 export function abortRun(runId: string): Promise<AbortRunResponse> {
-  return request<AbortRunResponse>(`/api/runs/${encodeURIComponent(runId)}/abort`, {
+  return request<AbortRunResponse>(abortRunPath(runId), {
     method: "POST",
   });
 }

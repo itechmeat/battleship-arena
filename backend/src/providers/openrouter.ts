@@ -14,6 +14,7 @@ export function createOpenRouterAdapter(options: CreateOpenRouterAdapterOptions 
     fetch: options.fetch ?? globalThis.fetch,
     pricing: options.pricing ?? PRICING_TABLE,
     defaultEndpoint: "https://openrouter.ai/api/v1/chat/completions",
+    includeVerbosity: false,
     headers: {
       "HTTP-Referer": "https://battleshiparena.local",
       "X-Title": "BattleShipArena",

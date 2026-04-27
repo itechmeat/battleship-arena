@@ -50,6 +50,9 @@ export interface RunMeta {
   reasoningTokens: number | null;
   costUsdMicros: number;
   budgetUsdMicros: number | null;
+  terminalErrorCode: string | null;
+  terminalErrorStatus: number | null;
+  terminalErrorMessage: string | null;
 }
 
 export interface RunShotRow {
@@ -82,6 +85,7 @@ export interface StartRunInput {
 
 export type ProviderError =
   | { kind: "transient"; cause: string }
+  | { kind: "rate_limited"; cause: string }
   | { kind: "unreachable"; cause: string; status: number };
 
 export type ProviderErrorShape = ProviderError;

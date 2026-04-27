@@ -40,7 +40,7 @@ describe("isSseEvent", () => {
       isSseEvent({
         kind: "outcome",
         id: 4,
-        outcome: "won",
+        outcome: "provider_rate_limited",
         shotsFired: 17,
         hits: 17,
         schemaErrors: 0,

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
+import { DEFAULT_BENCHMARK_SEED_DATE } from "@battleship-arena/shared";
 
 import { createBoardRouter } from "../../src/api/board.ts";
 
@@ -18,14 +19,27 @@ describe("GET /api/board", () => {
     expect(await first.arrayBuffer()).toEqual(await second.arrayBuffer());
   });
 
-  test("absent date uses today and no-cache", async () => {
+  test("absent date uses the fixed default benchmark seed", async () => {
     const app = new Hono();
     app.route("/api", createBoardRouter({ todayUtc: () => "2026-04-24" }));
 
     const response = await app.request("/api/board");
+    const explicitDefault = await app.request(`/api/board?date=${DEFAULT_BENCHMARK_SEED_DATE}`);
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-cache, must-revalidate");
+    expect(explicitDefault.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=86400, immutable");
+    expect(response.headers.get("etag")).toBe(explicitDefault.headers.get("etag"));
+  });
+
+  test("absent date allows the fixed default seed before that calendar date", async () => {
+    const app = new Hono();
+    app.route("/api", createBoardRouter({ todayUtc: () => "2026-04-20" }));
+
+    const response = await app.request("/api/board");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
   });
 
   test("matching If-None-Match returns 304", async () => {

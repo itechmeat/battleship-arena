@@ -4,14 +4,18 @@ import type { ProvidersResponseProvider } from "@battleship-arena/shared";
 
 import {
   apiKeyStorageKey,
-  defaultReasoningEnabled,
-  reasoningControlText,
   readStoredApiKey,
+  writeStoredApiKey,
+} from "../../src/lib/browser-storage.ts";
+import {
+  defaultReasoningEnabled,
+  parseBudgetUsdInput,
+  parseMockCostFromSearch,
+  reasoningControlText,
   resolveReasoningEnabled,
   shouldInjectMockProvider,
   syncCatalogSelection,
-  writeStoredApiKey,
-} from "../../src/islands/StartRunForm.tsx";
+} from "../../src/islands/startRunFormModel.ts";
 
 const LIVE_PROVIDERS: readonly ProvidersResponseProvider[] = [
   {
@@ -19,8 +23,8 @@ const LIVE_PROVIDERS: readonly ProvidersResponseProvider[] = [
     displayName: "OpenRouter",
     models: [
       {
-        id: "moonshotai/kimi-k2.6",
-        displayName: "Kimi K2.6",
+        id: "qwen/qwen3.5-plus-20260420",
+        displayName: "Qwen3.5 Plus 2026-04-20",
         hasReasoning: false,
         reasoningMode: "forced_off",
         pricing: {
@@ -38,8 +42,8 @@ const LIVE_PROVIDERS: readonly ProvidersResponseProvider[] = [
         lastReviewedAt: "2026-04-24",
       },
       {
-        id: "moonshotai/kimi-k2.5",
-        displayName: "Kimi K2.5",
+        id: "qwen/qwen3.6-flash",
+        displayName: "Qwen3.6 Flash",
         hasReasoning: false,
         reasoningMode: "forced_off",
         pricing: {
@@ -97,21 +101,21 @@ describe("StartRunForm mock provider gate", () => {
   test("prefers the first live provider over the injected mock placeholder", () => {
     expect(syncCatalogSelection(LIVE_PROVIDERS, "mock", "mock-happy")).toEqual({
       providerId: "openrouter",
-      modelId: "moonshotai/kimi-k2.6",
+      modelId: "qwen/qwen3.5-plus-20260420",
     });
   });
 
   test("keeps an existing live provider and model when they still exist", () => {
-    expect(syncCatalogSelection(LIVE_PROVIDERS, "openrouter", "moonshotai/kimi-k2.5")).toEqual({
+    expect(syncCatalogSelection(LIVE_PROVIDERS, "openrouter", "qwen/qwen3.6-flash")).toEqual({
       providerId: "openrouter",
-      modelId: "moonshotai/kimi-k2.5",
+      modelId: "qwen/qwen3.6-flash",
     });
   });
 
   test("falls back to the first model when the selected model is missing", () => {
     expect(syncCatalogSelection(LIVE_PROVIDERS, "openrouter", "missing-model")).toEqual({
       providerId: "openrouter",
-      modelId: "moonshotai/kimi-k2.6",
+      modelId: "qwen/qwen3.5-plus-20260420",
     });
   });
 
@@ -183,5 +187,21 @@ describe("StartRunForm mock provider gate", () => {
     expect(reasoningControlText(optionalModel, true)).toBe("Reasoning enabled");
     expect(reasoningControlText(forcedOffModel, true)).toBe("Reasoning unavailable");
     expect(reasoningControlText(forcedOnModel, false)).toBe("Reasoning required");
+  });
+
+  test("parses optional budgets and mock cost query values", () => {
+    expect(parseBudgetUsdInput("")).toEqual({ ok: true });
+    expect(parseBudgetUsdInput("0")).toEqual({ ok: true });
+    expect(parseBudgetUsdInput("0.25")).toEqual({ ok: true, budgetUsd: 0.25 });
+    expect(parseBudgetUsdInput("-1")).toEqual(
+      expect.objectContaining({ ok: false, error: expect.any(String) }),
+    );
+    expect(parseBudgetUsdInput("not-a-number")).toEqual(
+      expect.objectContaining({ ok: false, error: expect.any(String) }),
+    );
+
+    expect(parseMockCostFromSearch("?mockCost=0.15")).toBe(0.15);
+    expect(parseMockCostFromSearch("?mockCost=-1")).toBeUndefined();
+    expect(parseMockCostFromSearch("")).toBeUndefined();
   });
 });

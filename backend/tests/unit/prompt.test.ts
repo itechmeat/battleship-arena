@@ -109,12 +109,14 @@ describe("buildProviderUserText", () => {
     const cells = candidateCellsFromPrompt(prompt);
 
     expect(prompt).toContain(
-      "Rule-filtered candidate cells for this turn (4, engine-filtered unordered)",
+      "Rule-filtered candidate cells for this turn (12, engine-filtered unordered)",
     );
     expect(prompt).not.toContain("Ships still afloat");
     expect(prompt).toContain("Order is not a recommendation");
-    expect(cells).toHaveLength(4);
-    expect(cells).toEqual(expect.arrayContaining(["F10", "H4", "B2", "B6"]));
+    expect(cells).toHaveLength(12);
+    expect(cells).toEqual(
+      expect.arrayContaining(["F10", "H4", "B2", "B6", "H10", "G5", "D2", "D6"]),
+    );
     expect(cells.some((cell) => cellRow(cell) <= 5)).toBe(true);
     expect(cells.some((cell) => cellRow(cell) >= 6)).toBe(true);
     expect(cells.some((cell) => cellCol(cell) <= 5)).toBe(true);
@@ -147,7 +149,7 @@ describe("buildProviderUserText", () => {
 
     const cells = candidateCellsFromPrompt(prompt);
 
-    expect(cells).toHaveLength(4);
+    expect(cells).toHaveLength(12);
     expect(prompt).toContain(
       "Previous response failed to produce a valid final shot (2 consecutive schema errors).",
     );
