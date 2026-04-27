@@ -1,14 +1,23 @@
 import {
   calculateCostUsdMicros,
   type PricingEntry,
-  listProviderPricing,
-  reasoningModeForEntry,
   type PricingTable,
 } from "../pricing/catalog.ts";
 
-import { ProviderError, type ProviderErrorCode } from "./errors.ts";
-import { NonRetriable4xxError, requestText, TransientFailureError } from "./http.ts";
-import type { ProviderAdapter, ProviderCallOutput, ProviderModel } from "./types.ts";
+import { ProviderError } from "./errors.ts";
+import { requestText } from "./http.ts";
+import {
+  createProviderModelLookup,
+  resolveProviderReasoningEnabled,
+  supportsProviderResponseFormat,
+} from "./model-helpers.ts";
+import {
+  extractOpenAiUsage,
+  openAiContentToText,
+  type OpenAiChatCompletionResponse,
+} from "./openai-response.ts";
+import { translateProviderHttpError } from "./provider-error-translation.ts";
+import type { ProviderAdapter, ProviderCallOutput } from "./types.ts";
 import { buildProviderUserText } from "./prompt.ts";
 
 interface CreateOpenAiCompatibleAdapterOptions {
@@ -26,143 +35,13 @@ interface CreateOpenAiCompatibleAdapterOptions {
   mapRequestModelId?: (modelId: string) => string;
 }
 
-interface ChatCompletionResponse {
-  choices?: Array<{
-    message?: {
-      content?: unknown;
-    };
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-    completion_tokens_details?: {
-      reasoning_tokens?: number;
-    };
-    reasoning_tokens?: number;
-  };
-}
-
 const REASONING_MODEL_MAX_TOKENS = 2_048;
 const NON_REASONING_MODEL_MAX_TOKENS = 200;
 
-function contentToText(content: unknown): string | null {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    const text = content
-      .map((part) => {
-        if (typeof part === "string") {
-          return part;
-        }
-
-        if (
-          typeof part === "object" &&
-          part !== null &&
-          "text" in part &&
-          typeof part.text === "string"
-        ) {
-          return part.text;
-        }
-
-        return "";
-      })
-      .join("");
-
-    return text.length === 0 ? null : text;
-  }
-
-  return null;
-}
-
-function extractUsage(response: ChatCompletionResponse): {
-  tokensIn: number;
-  tokensOut: number;
-  reasoningTokens: number | null;
-} | null {
-  const usage = response.usage;
-  if (
-    usage === undefined ||
-    typeof usage.prompt_tokens !== "number" ||
-    typeof usage.completion_tokens !== "number"
-  ) {
-    return null;
-  }
-
-  const reasoningTokens =
-    usage.completion_tokens_details?.reasoning_tokens ?? usage.reasoning_tokens ?? null;
-
-  return {
-    tokensIn: usage.prompt_tokens,
-    tokensOut: usage.completion_tokens,
-    reasoningTokens,
-  };
-}
-
-function codeForNonRetriableStatus(status: number): ProviderErrorCode {
-  if (status === 401 || status === 403) {
-    return "auth";
-  }
-
-  if (status === 402) {
-    return "quota";
-  }
-
-  return "malformed_response";
-}
-
-function codeForTransientStatus(status: number | undefined, message: string): ProviderErrorCode {
-  if (status === 408) {
-    return "timeout";
-  }
-
-  if (status === 429) {
-    return "rate_limited";
-  }
-
-  if (status !== undefined && status >= 500) {
-    return "provider_5xx";
-  }
-
-  return message.includes("malformed JSON") ? "malformed_response" : "network";
-}
-
-function httpFailureCause(error: {
-  message: string;
-  status?: number;
-  body?: string;
-  cause?: unknown;
-}): string {
-  const body = error.body?.trim();
-  const cause = error.cause instanceof Error ? error.cause.message : String(error.cause ?? "");
-  const details = body?.length ? body : cause;
-  const prefix = error.status === undefined ? error.message : `${error.status} upstream`;
-
-  return details.length === 0 ? prefix : `${prefix}: ${details}`;
-}
-
 function translateHttpError(providerId: string, error: unknown): ProviderError | null {
-  if (error instanceof NonRetriable4xxError) {
-    return new ProviderError({
-      kind: "unreachable",
-      code: codeForNonRetriableStatus(error.status),
-      providerId,
-      message: error.message,
-      status: error.status,
-      cause: httpFailureCause(error),
-    });
-  }
-
-  if (error instanceof TransientFailureError) {
-    return new ProviderError({
-      kind: "transient",
-      code: codeForTransientStatus(error.status, error.message),
-      providerId,
-      message: error.message,
-      cause: httpFailureCause(error),
-    });
+  const translated = translateProviderHttpError(error);
+  if (translated !== null) {
+    return new ProviderError({ providerId, ...translated });
   }
 
   return null;
@@ -179,33 +58,10 @@ function authHeaders(
   return { Authorization: `Bearer ${apiKey}` };
 }
 
-function resolveCallReasoningEnabled(
-  model: ProviderModel,
-  requested: boolean | undefined,
-): boolean {
-  if (!model.hasReasoning || model.reasoningMode === "forced_off") {
-    return false;
-  }
-
-  if (model.reasoningMode === "forced_on") {
-    return true;
-  }
-
-  return requested ?? true;
-}
-
 export function createOpenAiCompatibleAdapter(
   options: CreateOpenAiCompatibleAdapterOptions,
 ): ProviderAdapter {
-  const entries = listProviderPricing(options.id, options.pricing);
-  const entryById = new Map(entries.map((entry) => [entry.modelId, entry]));
-  const models = entries.map((entry) => ({
-    id: entry.modelId,
-    displayName: entry.displayName,
-    hasReasoning: entry.hasReasoning,
-    reasoningMode: entry.reasoningMode ?? reasoningModeForEntry(entry),
-  }));
-  const modelById = new Map(models.map((model) => [model.id, model]));
+  const { entryById, models, modelById } = createProviderModelLookup(options.id, options.pricing);
 
   return {
     id: options.id,
@@ -226,7 +82,7 @@ export function createOpenAiCompatibleAdapter(
       }
 
       const startedAt = Date.now();
-      const reasoningEnabled = resolveCallReasoningEnabled(model, input.reasoningEnabled);
+      const reasoningEnabled = resolveProviderReasoningEnabled(model, input.reasoningEnabled);
       const maxTokens = reasoningEnabled
         ? (options.reasoningModelMaxTokens ?? REASONING_MODEL_MAX_TOKENS)
         : NON_REASONING_MODEL_MAX_TOKENS;
@@ -255,7 +111,8 @@ export function createOpenAiCompatibleAdapter(
                 max_tokens: maxTokens,
                 ...(options.includeVerbosity === false ? {} : { verbosity: "low" }),
                 ...reasoningFields,
-                ...(options.includeResponseFormat === false
+                ...(options.includeResponseFormat === false ||
+                !supportsProviderResponseFormat(entry)
                   ? {}
                   : { response_format: { type: "json_object" } }),
                 messages: [
@@ -286,9 +143,9 @@ export function createOpenAiCompatibleAdapter(
         throw error;
       }
 
-      let response: ChatCompletionResponse;
+      let response: OpenAiChatCompletionResponse;
       try {
-        response = JSON.parse(responseText) as ChatCompletionResponse;
+        response = JSON.parse(responseText) as OpenAiChatCompletionResponse;
       } catch {
         return {
           rawText: responseText,
@@ -300,8 +157,8 @@ export function createOpenAiCompatibleAdapter(
         };
       }
 
-      const rawText = contentToText(response.choices?.[0]?.message?.content);
-      const usage = extractUsage(response);
+      const rawText = openAiContentToText(response.choices?.[0]?.message?.content);
+      const usage = extractOpenAiUsage(response);
 
       if (rawText === null || usage === null) {
         throw new ProviderError({

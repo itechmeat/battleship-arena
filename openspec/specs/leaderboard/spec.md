@@ -2,17 +2,17 @@
 
 ## Purpose
 
-Defines the public leaderboard: the SQL queries and the `GET /api/leaderboard` endpoint that rank session-deduped `won` runs by exact `(providerId, modelId)`, for either today's UTC seed or across all seed dates, and the Solid `Leaderboard` island that renders them on the home page. Audience: home-page visitors, replay consumers, and tooling that wants a canonical ordered view of benchmark results. Scope: read-only aggregation over the existing `runs` table; partitioning and tiebreakers are specified so two callers always see the same ordering for the same data.
+Defines the public leaderboard: the SQL queries and the `GET /api/leaderboard` endpoint that rank session-deduped `won` runs by exact `(providerId, modelId)`, for either the fixed default benchmark seed or across all seed dates, and the Solid `Leaderboard` island that renders them on the home page. Audience: home-page visitors, replay consumers, and tooling that wants a canonical ordered view of benchmark results. Scope: read-only aggregation over the existing `runs` table; partitioning and tiebreakers are specified so two callers always see the same ordering for the same data.
 
-### Definition: current UTC seed date
+### Definition: fixed default benchmark seed
 
-"Today's seed" or "the current UTC seed date" refers to the UTC calendar date as a `YYYY-MM-DD` string computed from `new Date().toISOString().slice(0, 10)`. A run belongs to the seed whose UTC calendar day contains the run's `started_at`. The seed window rolls over exactly at `00:00:00.000Z`; a run that spans the rollover stays on the seed date it started on. Callers that want the day's leaderboard MUST derive the seed date from the server's current UTC clock, not from a client-side locale.
+The fixed default benchmark seed is the shared `DEFAULT_BENCHMARK_SEED_DATE` constant (`2026-04-21`). Default runs use this seed so benchmark results compare models against one remembered ship layout. The board generator remains available for explicit/custom seed dates, but default benchmark runs MUST NOT roll over automatically with the UTC calendar date.
 
 ## Requirements
 
 ### Requirement: GET /api/leaderboard supports scope=today|all with optional filters
 
-`GET /api/leaderboard` SHALL accept a required `scope` query parameter taking the values `today` or `all`, plus optional `providerId` and `modelId` parameters. Unknown or missing `scope` MUST reject with `400 { code: "invalid_input" }`. The response body MUST match the `LeaderboardResponse` shape (scope, `seedDate`, `rows[]`), with `rows` sorted according to scope-specific rules.
+`GET /api/leaderboard` SHALL accept a required `scope` query parameter taking the values `today` or `all`, plus optional `providerId` and `modelId` parameters. **Breaking semantic change:** `scope=today` now returns results for the fixed default benchmark seed (`DEFAULT_BENCHMARK_SEED_DATE` = `2026-04-21`) rather than the current UTC calendar day. The wire value remains `today`, but consumers expecting rolling daily results will receive the same fixed-seed dataset until a future capability introduces named benchmark seasons or custom seed scopes. Unknown or missing `scope` MUST reject with `400 { code: "invalid_input" }`. The response body MUST match the `LeaderboardResponse` shape (scope, `seedDate`, `rows[]`), with `rows` sorted according to scope-specific rules.
 
 When `providerId` is present, the handler SHALL filter rows to exactly that provider id (string equality). When `modelId` is present, the handler SHALL filter rows to exactly that model id (string equality). When both are present, the handler SHALL apply them conjunctively (the row must match both). Missing filter parameters impose no restriction. Unknown `providerId` or `modelId` values MUST NOT produce an error; the handler MUST return `200` with `rows: []` and the same `scope` / `seedDate` envelope it would otherwise produce.
 
@@ -33,8 +33,8 @@ When `providerId` is present, the handler SHALL filter rows to exactly that prov
 
 #### Scenario: Both filters narrow conjunctively
 
-- **WHEN** a client issues `GET /api/leaderboard?scope=all&providerId=openrouter&modelId=openai/gpt-5-nano`
-- **THEN** every returned row has `providerId === "openrouter"` AND `modelId === "openai/gpt-5-nano"`
+- **WHEN** a client issues `GET /api/leaderboard?scope=all&providerId=openrouter&modelId=openai/gpt-5.4-nano`
+- **THEN** every returned row has `providerId === "openrouter"` AND `modelId === "openai/gpt-5.4-nano"`
 
 #### Scenario: Unknown providerId returns empty rows, not an error
 
@@ -43,21 +43,21 @@ When `providerId` is present, the handler SHALL filter rows to exactly that prov
 
 ### Requirement: Today scope dedups within a session and returns best per model
 
-For `scope=today` the backend SHALL, for the current UTC seed date, deduplicate wins within each `(client_session, provider_id, model_id)` partition by taking the lowest `shots_fired` (tiebreak `started_at ASC`), then across sessions take the lowest `shots_fired` per `(provider_id, model_id)` (tiebreak `started_at ASC`). Only `outcome = 'won'` rows for the current UTC seed MUST contribute. Rows MUST be ordered by `shots_to_win ASC, display_name ASC`.
+For `scope=today` the backend SHALL, for the fixed default benchmark seed, deduplicate wins within each `(client_session, provider_id, model_id)` partition by taking the lowest `shots_fired` (tiebreak `started_at ASC`), then across sessions take the lowest `shots_fired` per `(provider_id, model_id)` (tiebreak `started_at ASC`). Only `outcome = 'won'` rows for the fixed default benchmark seed MUST contribute. Rows MUST be ordered by `shots_to_win ASC, display_name ASC`.
 
 #### Scenario: Two wins in one session collapse to the lower-shots row
 
-- **WHEN** a single session has two `won` runs for the same model on today's seed with `shots_fired` 22 and 19
+- **WHEN** a single session has two `won` runs for the same model on the fixed default benchmark seed with `shots_fired` 22 and 19
 - **THEN** that session contributes a single row with `shots_to_win === 19`
 
 #### Scenario: Cross-session best wins the day's model row
 
-- **WHEN** two different sessions each win with the same model on today's seed, one at 19 shots and the other at 25 shots
+- **WHEN** two different sessions each win with the same model on the fixed default benchmark seed, one at 19 shots and the other at 25 shots
 - **THEN** the response contains one row for that model with `shots_to_win === 19`
 
-#### Scenario: Yesterday wins are excluded
+#### Scenario: Non-default seed wins are excluded
 
-- **WHEN** a client has a `won` row for yesterday's seed and no runs today
+- **WHEN** a client has a `won` row for a non-default seed and no wins on the fixed default benchmark seed
 - **THEN** `GET /api/leaderboard?scope=today` returns `rows: []`
 
 ### Requirement: All-time scope aggregates session-deduped wins and computes classical median
@@ -81,16 +81,16 @@ For `scope=all` the backend SHALL partition wins on `(client_session, provider_i
 
 ### Requirement: Only won runs feed the leaderboard
 
-The leaderboard queries for both scopes SHALL filter on `outcome = 'won'`. Rows with outcomes `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, `aborted_viewer`, or `aborted_server_restart` MUST NOT appear in either scope's response.
+The leaderboard queries for both scopes SHALL filter on `outcome = 'won'`. Rows with outcomes `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, `provider_rate_limited`, `aborted_viewer`, or `aborted_server_restart` MUST NOT appear in either scope's response.
 
 #### Scenario: DNF rows never appear
 
-- **WHEN** the database contains one `won` row and ten rows with various DNF outcomes for today's seed
+- **WHEN** the database contains one `won` row and ten rows with various DNF outcomes for the fixed default benchmark seed
 - **THEN** `GET /api/leaderboard?scope=today` returns exactly one row
 
 ### Requirement: Leaderboard response uses Cache-Control: no-store
 
-`GET /api/leaderboard` SHALL attach `Cache-Control: no-store` to every response. The response MUST NOT carry an `ETag`. Clients MUST re-fetch on every view to avoid UTC-rollover staleness.
+`GET /api/leaderboard` SHALL attach `Cache-Control: no-store` to every response. The response MUST NOT carry an `ETag`. Clients MUST re-fetch on every view so newly completed runs appear promptly.
 
 #### Scenario: no-store header present
 

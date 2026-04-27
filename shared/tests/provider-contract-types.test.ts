@@ -25,20 +25,27 @@ describe("S3 shared provider contracts", () => {
       kind: "transient",
       cause: "503 upstream",
     };
+    const rateLimited: ProviderError = {
+      kind: "rate_limited",
+      cause: "429 upstream",
+    };
 
     expect(unreachable.kind).toBe("unreachable");
     expect(unreachable.status).toBe(401);
     expect(transient.kind).toBe("transient");
-    // Exhaustive narrowing compiles: the switch statement must cover both variants.
+    expect(rateLimited.kind).toBe("rate_limited");
+    // Exhaustive narrowing compiles: the switch statement must cover all variants.
     const label = ((error: ProviderError): string => {
       switch (error.kind) {
         case "transient":
           return "transient";
+        case "rate_limited":
+          return "rate_limited";
         case "unreachable":
           return "unreachable";
       }
-    })(unreachable);
-    expect(label).toBe("unreachable");
+    })(rateLimited);
+    expect(label).toBe("rate_limited");
   });
 
   test("ProvidersResponse carries real-provider catalog data and pricing estimates", () => {
@@ -51,13 +58,13 @@ describe("S3 shared provider contracts", () => {
           displayName: "OpenRouter",
           models: [
             {
-              id: "openai/gpt-5-nano",
-              displayName: "OpenAI: GPT-5 Nano",
+              id: "openai/gpt-5.4-nano",
+              displayName: "OpenAI: GPT-5.4 Nano",
               hasReasoning: true,
               reasoningMode: "optional",
               pricing: {
-                inputUsdPerMtok: 0.05,
-                outputUsdPerMtok: 0.4,
+                inputUsdPerMtok: 0.2,
+                outputUsdPerMtok: 1.25,
               },
               estimatedPromptTokens: 1200,
               estimatedImageTokens: 800,
@@ -77,7 +84,7 @@ describe("S3 shared provider contracts", () => {
 
     expect(providersAreReadonly).toBe(true);
     expect(modelsAreReadonly).toBe(true);
-    expect(model?.id).toBe("openai/gpt-5-nano");
+    expect(model?.id).toBe("openai/gpt-5.4-nano");
     expect(response.providers[0]?.models[0]?.estimatedCostRange.maxUsd).toBeGreaterThan(0);
   });
 
@@ -90,8 +97,8 @@ describe("S3 shared provider contracts", () => {
         {
           rank: 1,
           providerId: "openrouter",
-          modelId: "openai/gpt-5-nano",
-          displayName: "OpenAI: GPT-5 Nano",
+          modelId: "openai/gpt-5.4-nano",
+          displayName: "OpenAI: GPT-5.4 Nano",
           reasoningEnabled: true,
           runsCount: 2,
           shotsToWin: 17,

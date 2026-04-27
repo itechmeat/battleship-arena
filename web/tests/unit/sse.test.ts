@@ -62,9 +62,7 @@ describe("subscribeToRun", () => {
       },
     });
 
-    expect(FakeEventSource.instances[0]?.url).toBe(
-      "https://arena.example/api/runs/run%201/events?lastEventId=7",
-    );
+    expect(FakeEventSource.instances[0]?.url).toBe("/api/runs/run%201/events?lastEventId=7");
     expect(FakeEventSource.instances[0]?.listeners.has("open")).toBe(false);
 
     unsubscribe();

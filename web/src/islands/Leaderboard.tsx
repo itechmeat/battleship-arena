@@ -1,23 +1,25 @@
 import type {
   LeaderboardResponse,
-  LeaderboardRow,
   LeaderboardScope,
   ProvidersResponse,
 } from "@battleship-arena/shared";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { getLeaderboard, getProviders } from "../lib/api.ts";
+import {
+  formatShots,
+  leaderboardFilterOptions,
+  modelOptionsForProvider,
+  visibleLeaderboardRows,
+  type ReasoningFilterValue,
+} from "./leaderboardModel.ts";
 import styles from "./Leaderboard.module.css";
-
-function formatShots(shots: number): string {
-  return Number.isInteger(shots) ? String(shots) : shots.toFixed(1);
-}
 
 export function Leaderboard() {
   const [scope, setScope] = createSignal<LeaderboardScope>("today");
   const [providerFilter, setProviderFilter] = createSignal("");
   const [modelFilter, setModelFilter] = createSignal("");
-  const [reasoningFilter, setReasoningFilter] = createSignal<"" | "true" | "false">("");
+  const [reasoningFilter, setReasoningFilter] = createSignal<ReasoningFilterValue>("");
   const [catalog, setCatalog] = createSignal<ProvidersResponse>({
     providers: [],
   });
@@ -25,23 +27,8 @@ export function Leaderboard() {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
 
-  const selectedProvider = createMemo(() =>
-    catalog().providers.find((provider) => provider.id === providerFilter()),
-  );
-  const modelOptions = createMemo(() => {
-    const provider = selectedProvider();
-    if (provider !== undefined) {
-      return provider.models;
-    }
-
-    return catalog().providers.flatMap((provider) => provider.models);
-  });
-  const visibleRows = createMemo<Array<LeaderboardRow & { rank: number }>>(() =>
-    (leaderboard()?.rows ?? []).map((row, index) => ({
-      ...row,
-      rank: index + 1,
-    })),
-  );
+  const modelOptions = createMemo(() => modelOptionsForProvider(catalog(), providerFilter()));
+  const visibleRows = createMemo(() => visibleLeaderboardRows(leaderboard()));
 
   onMount(() => {
     const controller = new AbortController();
@@ -73,11 +60,11 @@ export function Leaderboard() {
       try {
         setLeaderboard(
           await getLeaderboard(currentScope, {
-            ...(providerId.length === 0 ? {} : { providerId }),
-            ...(modelId.length === 0 ? {} : { modelId }),
-            ...(reasoningEnabled.length === 0
-              ? {}
-              : { reasoningEnabled: reasoningEnabled === "true" }),
+            ...leaderboardFilterOptions({
+              providerId,
+              modelId,
+              reasoningFilter: reasoningEnabled,
+            }),
             signal: controller.signal,
           }),
         );
@@ -155,7 +142,7 @@ export function Leaderboard() {
           <select
             value={reasoningFilter()}
             onInput={(event) =>
-              setReasoningFilter(event.currentTarget.value as "" | "true" | "false")
+              setReasoningFilter(event.currentTarget.value as ReasoningFilterValue)
             }
           >
             <option value="">All</option>

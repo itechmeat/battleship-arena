@@ -1,14 +1,15 @@
 import {
   calculateCostUsdMicros,
   getPricingEntry,
-  listProviderPricing,
   PRICING_TABLE,
   type PricingTable,
 } from "../pricing/catalog.ts";
 
 import { createOpenAiCompatibleAdapter } from "./openai-compatible.ts";
-import { ProviderError, type ProviderErrorCode } from "./errors.ts";
-import { NonRetriable4xxError, requestText, TransientFailureError } from "./http.ts";
+import { ProviderError } from "./errors.ts";
+import { requestText } from "./http.ts";
+import { createProviderModelLookup } from "./model-helpers.ts";
+import { translateProviderHttpError } from "./provider-error-translation.ts";
 import { buildProviderUserText } from "./prompt.ts";
 import type { ProviderAdapter, ProviderCallInput, ProviderCallOutput } from "./types.ts";
 
@@ -33,67 +34,12 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const OPENCODE_GO_REASONING_MAX_TOKENS = 4_096;
 const OPENCODE_GO_MESSAGES_MAX_TOKENS = 2_048;
 
-function codeForNonRetriableStatus(status: number): ProviderErrorCode {
-  if (status === 401 || status === 403) {
-    return "auth";
-  }
-
-  if (status === 402) {
-    return "quota";
-  }
-
-  return "malformed_response";
-}
-
-function codeForTransientStatus(status: number | undefined, message: string): ProviderErrorCode {
-  if (status === 408) {
-    return "timeout";
-  }
-
-  if (status === 429) {
-    return "rate_limited";
-  }
-
-  if (status !== undefined && status >= 500) {
-    return "provider_5xx";
-  }
-
-  return message.includes("malformed JSON") ? "malformed_response" : "network";
-}
-
-function httpFailureCause(error: {
-  message: string;
-  status?: number;
-  body?: string;
-  cause?: unknown;
-}): string {
-  const body = error.body?.trim();
-  const cause = error.cause instanceof Error ? error.cause.message : String(error.cause ?? "");
-  const details = body?.length ? body : cause;
-  const prefix = error.status === undefined ? error.message : `${error.status} upstream`;
-
-  return details.length === 0 ? prefix : `${prefix}: ${details}`;
-}
-
 function translateHttpError(error: unknown): ProviderError | null {
-  if (error instanceof NonRetriable4xxError) {
+  const translated = translateProviderHttpError(error);
+  if (translated !== null) {
     return new ProviderError({
-      kind: "unreachable",
-      code: codeForNonRetriableStatus(error.status),
       providerId: OPENCODE_GO_PROVIDER_ID,
-      message: error.message,
-      status: error.status,
-      cause: httpFailureCause(error),
-    });
-  }
-
-  if (error instanceof TransientFailureError) {
-    return new ProviderError({
-      kind: "transient",
-      code: codeForTransientStatus(error.status, error.message),
-      providerId: OPENCODE_GO_PROVIDER_ID,
-      message: error.message,
-      cause: httpFailureCause(error),
+      ...translated,
     });
   }
 
@@ -246,8 +192,7 @@ async function callOpenCodeGoMessages(
 export function createOpenCodeGoAdapter(options: CreateOpenCodeGoAdapterOptions = {}) {
   const fetch = options.fetch ?? globalThis.fetch;
   const pricing = options.pricing ?? PRICING_TABLE;
-  const entries = listProviderPricing(OPENCODE_GO_PROVIDER_ID, pricing);
-  const modelById = new Map(entries.map((entry) => [entry.modelId, entry]));
+  const { entryById } = createProviderModelLookup(OPENCODE_GO_PROVIDER_ID, pricing);
   const openAiCompatible = createOpenAiCompatibleAdapter({
     id: OPENCODE_GO_PROVIDER_ID,
     displayName: "OpenCode Go",
@@ -270,7 +215,7 @@ export function createOpenCodeGoAdapter(options: CreateOpenCodeGoAdapterOptions 
     models: openAiCompatible.models,
 
     async call(input, signal) {
-      if (modelById.get(input.modelId)?.endpoint === OPENCODE_GO_MESSAGES_ENDPOINT) {
+      if (entryById.get(input.modelId)?.endpoint === OPENCODE_GO_MESSAGES_ENDPOINT) {
         return await callOpenCodeGoMessages(input, signal, { fetch, pricing });
       }
 

@@ -34,7 +34,7 @@ interface SmokeSummary {
 }
 
 const DEFAULT_MODELS: Record<ProviderId, string> = {
-  openrouter: "openai/gpt-5-nano",
+  openrouter: "openai/gpt-5.4-nano",
   "opencode-go": "opencode-go/glm-5.1",
   zai: "zai/glm-5.1",
 };
@@ -243,7 +243,7 @@ function requestPlanFor(providerId: ProviderId, modelId: string) {
 }
 
 function redactText(text: string, keys: readonly string[]): string {
-  let redacted = sanitizeProviderCause(text) ?? text;
+  let redacted = text;
   for (const key of keys) {
     if (key.length > 0) {
       redacted = redacted.split(key).join("[redacted]");
@@ -251,6 +251,10 @@ function redactText(text: string, keys: readonly string[]): string {
   }
 
   return redacted;
+}
+
+function redactDiagnosticText(text: string, keys: readonly string[]): string {
+  return sanitizeProviderCause(redactText(text, keys)) ?? text;
 }
 
 function jsonLine(value: unknown, keys: readonly string[]): string {
@@ -421,7 +425,7 @@ try {
   await main();
 } catch (error) {
   console.error(
-    redactText(
+    redactDiagnosticText(
       error instanceof Error ? error.message : String(error),
       collectAllKeys(parsedOptions),
     ),

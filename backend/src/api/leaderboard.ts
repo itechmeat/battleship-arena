@@ -1,41 +1,20 @@
 import { Hono } from "hono";
 
-import type { LeaderboardRow, LeaderboardScope } from "@battleship-arena/shared";
+import { DEFAULT_BENCHMARK_SEED_DATE, type LeaderboardRow } from "@battleship-arena/shared";
 
 import type { Queries } from "../db/queries.ts";
-import { respondError } from "../errors.ts";
+
+import { respondInvalidInput } from "./responses.ts";
+import { readLeaderboardScope, readOptionalBooleanQuery } from "./validation.ts";
 
 interface LeaderboardRouterOptions {
   queries: Queries;
+  benchmarkSeedDate?: () => string;
   todayUtc?: () => string;
 }
 
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function readScope(value: string | undefined): LeaderboardScope | null {
-  if (value === "today" || value === "all") {
-    return value;
-  }
-
-  return null;
-}
-
-function readOptionalBoolean(value: string | undefined): boolean | undefined | null {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === "true") {
-    return true;
-  }
-
-  if (value === "false") {
-    return false;
-  }
-
-  return null;
+function defaultBenchmarkSeedDate(): string {
+  return DEFAULT_BENCHMARK_SEED_DATE;
 }
 
 function rerankRows(rows: readonly LeaderboardRow[]): LeaderboardRow[] {
@@ -44,28 +23,29 @@ function rerankRows(rows: readonly LeaderboardRow[]): LeaderboardRow[] {
 
 export function createLeaderboardRouter(options: LeaderboardRouterOptions) {
   const router = new Hono();
-  const readToday = options.todayUtc ?? todayUtc;
+  const readBenchmarkSeedDate =
+    options.benchmarkSeedDate ?? options.todayUtc ?? defaultBenchmarkSeedDate;
 
   router.get("/leaderboard", (context) => {
     context.header("Cache-Control", "no-store");
 
-    const scope = readScope(context.req.query("scope"));
+    const scope = readLeaderboardScope(context.req.query("scope"));
     if (scope === null) {
-      return respondError(context, "invalid_input", 400, "Invalid input", {
+      return respondInvalidInput(context, {
         field: "scope",
       });
     }
 
     const providerId = context.req.query("providerId");
     const modelId = context.req.query("modelId");
-    const reasoningEnabled = readOptionalBoolean(context.req.query("reasoningEnabled"));
+    const reasoningEnabled = readOptionalBooleanQuery(context.req.query("reasoningEnabled"));
     if (reasoningEnabled === null) {
-      return respondError(context, "invalid_input", 400, "Invalid input", {
+      return respondInvalidInput(context, {
         field: "reasoningEnabled",
       });
     }
 
-    const response = options.queries.getLeaderboard(scope, readToday());
+    const response = options.queries.getLeaderboard(scope, readBenchmarkSeedDate());
     const rows = rerankRows(
       response.rows.filter(
         (row) =>

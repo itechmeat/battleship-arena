@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
-import type { StartRunInput } from "@battleship-arena/shared";
+import { DEFAULT_BENCHMARK_SEED_DATE, type StartRunInput } from "@battleship-arena/shared";
 
 import { createQueries } from "../../src/db/queries.ts";
 import { withTempDatabase } from "../../src/db/with-temp-database.ts";
@@ -80,7 +80,7 @@ describe("POST /api/runs", () => {
         modelId: "mock-happy",
         apiKey,
         reasoningEnabled: false,
-        seedDate: new Date().toISOString().slice(0, 10),
+        seedDate: DEFAULT_BENCHMARK_SEED_DATE,
       });
       expect(started[0]?.clientSession).toEqual(expect.any(String));
       expect(started[0]?.clientSession.length).toBeGreaterThan(0);
@@ -93,8 +93,8 @@ describe("POST /api/runs", () => {
         id: "openrouter",
         models: [
           {
-            id: "openai/gpt-5-nano",
-            displayName: "OpenAI: GPT-5 Nano",
+            id: "openai/gpt-5.4-nano",
+            displayName: "OpenAI: GPT-5.4 Nano",
             hasReasoning: true,
             reasoningMode: "optional",
           },
@@ -112,7 +112,7 @@ describe("POST /api/runs", () => {
         },
         body: JSON.stringify({
           providerId: "openrouter",
-          modelId: "openai/gpt-5-nano",
+          modelId: "openai/gpt-5.4-nano",
           apiKey: "test-key",
         }),
       });
@@ -128,8 +128,8 @@ describe("POST /api/runs", () => {
         id: "openrouter",
         models: [
           {
-            id: "openai/gpt-5-nano",
-            displayName: "OpenAI: GPT-5 Nano",
+            id: "openai/gpt-5.4-nano",
+            displayName: "OpenAI: GPT-5.4 Nano",
             hasReasoning: true,
             reasoningMode: "optional",
           },
@@ -147,7 +147,7 @@ describe("POST /api/runs", () => {
         },
         body: JSON.stringify({
           providerId: "openrouter",
-          modelId: "openai/gpt-5-nano",
+          modelId: "openai/gpt-5.4-nano",
           apiKey: "test-key",
           reasoningEnabled: false,
         }),

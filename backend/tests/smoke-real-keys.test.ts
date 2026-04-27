@@ -58,7 +58,7 @@ describe("real-token smoke CLI", () => {
     expect(plan.method).toBe("POST");
     expect(plan.headers?.Authorization).toBe("Bearer [redacted]");
     expect(JSON.stringify(plan)).not.toContain("sk-sentinel-openrouter-secret");
-    expect(plan.body).toEqual(expect.objectContaining({ model: "openai/gpt-5-nano" }));
+    expect(plan.body).toEqual(expect.objectContaining({ model: "openai/gpt-5.4-nano" }));
   });
 
   test("dry-run supports Z.AI Coding Plan provider", async () => {

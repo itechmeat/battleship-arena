@@ -8,12 +8,12 @@ TBD - created by archiving change s1a-bootstrap. Update Purpose after archive.
 
 ### Requirement: Outcome enum with type-narrowing guard
 
-The `@battleship-arena/shared` package SHALL export a closed-set outcome enum whose members are exactly the seven values `won`, `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, `aborted_viewer`, and `aborted_server_restart`, together with a TypeScript type alias derived from that set and a runtime type-narrowing guard that returns a boolean indicating whether an arbitrary value is a member of the enum. The enum members MUST match `docs/spec.md` section 4.2 terminal outcomes exactly; no synonym, no additional value, no omission. Consumers MUST be able to use the guard to narrow `unknown` to the outcome type without additional runtime checks.
+The `@battleship-arena/shared` package SHALL export a closed-set outcome enum whose members are exactly the eight values `won`, `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, `provider_rate_limited`, `aborted_viewer`, and `aborted_server_restart`, together with a TypeScript type alias derived from that set and a runtime type-narrowing guard that returns a boolean indicating whether an arbitrary value is a member of the enum. The enum members MUST match `docs/spec.md` section 4.2 terminal outcomes exactly; no synonym, no additional value, no omission. Consumers MUST be able to use the guard to narrow `unknown` to the outcome type without additional runtime checks.
 
-#### Scenario: All seven outcome values are exported
+#### Scenario: All eight outcome values are exported
 
 - **WHEN** a consumer imports the outcome enum from the shared package
-- **THEN** it MUST contain exactly the strings `won`, `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, `aborted_viewer`, `aborted_server_restart` and nothing else
+- **THEN** it MUST contain exactly the strings `won`, `dnf_shot_cap`, `dnf_schema_errors`, `dnf_budget`, `llm_unreachable`, `provider_rate_limited`, `aborted_viewer`, `aborted_server_restart` and nothing else
 
 #### Scenario: Guard accepts a known outcome string
 
@@ -180,12 +180,17 @@ The shared package SHALL export `CellState` as a union of exactly the string lit
 
 ### Requirement: RunMeta, RunShotRow, and StartRunInput types
 
-The shared package SHALL export `RunMeta`, `RunShotRow`, and `StartRunInput` TypeScript interfaces matching the public wire shape returned by the runs API. `RunMeta` MUST mirror the `runs` row minus `client_session`, MUST carry `reasoningEnabled: boolean`, and MUST carry a nullable `outcome` narrowed to the `Outcome` union. `RunShotRow` MUST mirror the `run_shots` row with `result` narrowed to the union `"hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate" | "timeout"`. `StartRunInput` MUST carry `providerId`, `modelId`, `apiKey`, `reasoningEnabled: boolean`, optional `budgetUsd`, `clientSession`, and `seedDate`.
+The shared package SHALL export `RunMeta`, `RunShotRow`, and `StartRunInput` TypeScript interfaces matching the public wire shape returned by the runs API. `RunMeta` MUST mirror the `runs` row minus `client_session`, MUST carry `reasoningEnabled: boolean`, MUST carry a nullable `outcome` narrowed to the `Outcome` union, and MUST carry nullable terminal provider diagnostics: `terminalErrorCode: string | null`, `terminalErrorStatus: number | null`, and `terminalErrorMessage: string | null`. These terminal-error fields are `null` unless a terminal provider failure such as quota exhaustion, authentication rejection, or provider rate limiting ends the run before a shot row is written for the failed turn. `RunShotRow` MUST mirror the `run_shots` row with `result` narrowed to the union `"hit" | "miss" | "sunk" | "schema_error" | "invalid_coordinate" | "timeout"`. `StartRunInput` MUST carry `providerId`, `modelId`, `apiKey`, `reasoningEnabled: boolean`, optional `budgetUsd`, `clientSession`, and `seedDate`.
 
 #### Scenario: RunMeta omits client_session
 
 - **WHEN** a consumer declares a value of type `RunMeta`
 - **THEN** the TypeScript type does not include a `clientSession` or `client_session` property
+
+#### Scenario: RunMeta exposes terminal provider diagnostics
+
+- **WHEN** a consumer declares a value of type `RunMeta`
+- **THEN** the TypeScript compiler requires `terminalErrorCode`, `terminalErrorStatus`, and `terminalErrorMessage` fields whose values are either nullable diagnostics for terminal provider failures or `null` for normal runs
 
 #### Scenario: RunShotRow.result is a closed union
 
@@ -241,17 +246,17 @@ The shared package SHALL export four new constants: `RING_CAPACITY = 200`, `SSE_
 
 ### Requirement: ProviderError discriminated union
 
-The `@battleship-arena/shared` package SHALL export a `ProviderError` type as a TypeScript discriminated union with the shape `{ kind: "transient"; cause: string } | { kind: "unreachable"; cause: string; status: number }`. The `kind` field MUST be the sole discriminator. The `transient` variant MUST carry only `kind` and `cause`. The `unreachable` variant MUST carry `kind`, `cause`, and a numeric `status`. The type MUST be importable from the shared package's single stable entry point and MUST be consumable by the backend engine to branch on `kind` without additional runtime introspection beyond a narrowing switch.
+The `@battleship-arena/shared` package SHALL export a `ProviderError` type as a TypeScript discriminated union with the shape `{ kind: "transient"; cause: string } | { kind: "rate_limited"; cause: string } | { kind: "unreachable"; cause: string; status: number }`. The `kind` field MUST be the sole discriminator. The `transient` variant MUST carry only `kind` and `cause`. The `rate_limited` variant MUST carry only `kind` and `cause`. The `unreachable` variant MUST carry `kind`, `cause`, and a numeric `status`. The type MUST be importable from the shared package's single stable entry point and MUST be consumable by the backend engine to branch on `kind` without additional runtime introspection beyond a narrowing switch.
 
 #### Scenario: Both variants compile and narrow by kind
 
-- **WHEN** a consumer imports `ProviderError` and writes a `switch (err.kind)` block with cases for `"transient"` and `"unreachable"`
+- **WHEN** a consumer imports `ProviderError` and writes a `switch (err.kind)` block with cases for `"transient"`, `"rate_limited"`, and `"unreachable"`
 - **THEN** the TypeScript compiler narrows `err` to the respective variant inside each case, accepts access to `err.cause` in both, and accepts access to `err.status` only inside the `"unreachable"` case
 
 #### Scenario: Engine consumes the union to map to outcomes
 
 - **WHEN** the engine receives a value typed as `ProviderError` and branches on `kind`
-- **THEN** the compiler permits the engine to classify the `transient` branch as a `schema_error` turn and the `unreachable` branch as the `llm_unreachable` outcome without any `as` cast
+- **THEN** the compiler permits the engine to classify ordinary `transient` failures as `schema_error` turns, the `rate_limited` branch as the `provider_rate_limited` outcome, and the remaining `unreachable` branch as the `llm_unreachable` outcome without any `as` cast
 
 ### Requirement: ProvidersResponse wire shape
 

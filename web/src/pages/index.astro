@@ -1,24 +1,22 @@
 ---
 import type { HealthResponse } from "@battleship-arena/shared";
 
+import BaseHead from "../components/BaseHead.astro";
+import ServiceWorkerScript from "../components/ServiceWorkerScript.astro";
 import Leaderboard from "../islands/Leaderboard.tsx";
+import { APP_FONT_STACK } from "../lib/page-shell.ts";
 
 const healthStatus: HealthResponse["status"] = "ok";
-const shouldRegisterServiceWorker = import.meta.env.PROD;
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f766e" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <title>BattleShipArena</title>
-    <style is:global>
+    <BaseHead title="BattleShipArena" />
+    <style is:global define:vars={{ appFontStack: APP_FONT_STACK }}>
       :root {
         color-scheme: light;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-family: var(--appFontStack);
         background: #f8fafc;
         color: #0f172a;
       }
@@ -86,14 +84,6 @@ const shouldRegisterServiceWorker = import.meta.env.PROD;
       <p data-health-status={healthStatus} hidden>ok</p>
     </main>
 
-    <script is:inline define:vars={{ shouldRegisterServiceWorker }}>
-      if (shouldRegisterServiceWorker) {
-        window.addEventListener("load", () => {
-          if ("serviceWorker" in navigator) {
-            void navigator.serviceWorker.register("/sw.js");
-          }
-        });
-      }
-    </script>
+    <ServiceWorkerScript />
   </body>
 </html>

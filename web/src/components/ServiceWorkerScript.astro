@@ -1,0 +1,13 @@
+---
+const shouldRegisterServiceWorker = import.meta.env.PROD;
+---
+
+<script is:inline define:vars={{ shouldRegisterServiceWorker }}>
+  if (shouldRegisterServiceWorker) {
+    window.addEventListener("load", () => {
+      if ("serviceWorker" in navigator) {
+        void navigator.serviceWorker.register("/sw.js");
+      }
+    });
+  }
+</script>

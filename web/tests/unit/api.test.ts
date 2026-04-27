@@ -111,7 +111,7 @@ describe("api client", () => {
     await getProviders();
     await getLeaderboard("all", {
       providerId: "openrouter",
-      modelId: "openai/gpt-5-nano",
+      modelId: "openai/gpt-5.4-nano",
       reasoningEnabled: true,
       signal: controller.signal,
     });
@@ -119,7 +119,7 @@ describe("api client", () => {
     expect(calls).toEqual([
       { path: "/api/providers", signal: undefined },
       {
-        path: "/api/leaderboard?scope=all&providerId=openrouter&modelId=openai%2Fgpt-5-nano&reasoningEnabled=true",
+        path: "/api/leaderboard?scope=all&providerId=openrouter&modelId=openai%2Fgpt-5.4-nano&reasoningEnabled=true",
         signal: controller.signal,
       },
     ]);

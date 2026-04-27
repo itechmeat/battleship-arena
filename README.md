@@ -8,7 +8,7 @@ The model is the player. The human is the spectator who brings an API key, picks
 
 Most public LLM benchmarks grade one-shot trivia against a static answer key, leak into training data, and hide the part that actually matters: how a model behaves over many turns, with imperfect information, a visual input, and a strict output contract it must keep honoring or lose the game.
 
-Battleship exposes exactly those behaviors. Spatial reasoning from a compact board state, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all in a game anyone can read at a glance. One board is generated per UTC day and is identical for every player in the world that day; scores are pinned to the provider's exact model ID so historical numbers stay meaningful when a model is silently updated behind the same display name.
+Battleship exposes exactly those behaviors. Spatial reasoning from a compact board state, long-horizon state tracking, calibration under uncertainty, and instruction-following discipline, all in a game anyone can read at a glance. Default benchmark runs use one fixed remembered board so every model faces the same layout; scores are pinned to the provider's exact model ID so historical numbers stay meaningful when a model is silently updated behind the same display name.
 
 Full product framing: see [`docs/about.md`](./docs/about.md).
 

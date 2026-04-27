@@ -1,5 +1,7 @@
 import { isSseEvent, type SseEvent } from "@battleship-arena/shared";
 
+import { runEventsPath } from "./api-routes.ts";
+
 export interface SubscribeToRunOptions {
   lastEventId: number | null;
   onEvent: (event: Exclude<SseEvent, { kind: "resync" }>) => void;
@@ -44,12 +46,7 @@ export function subscribeToRun(runId: string, options: SubscribeToRunOptions): (
       return;
     }
 
-    const url = new URL(`/api/runs/${encodeURIComponent(runId)}/events`, window.location.origin);
-    if (currentLastEventId !== null) {
-      url.searchParams.set("lastEventId", String(currentLastEventId));
-    }
-
-    source = new EventSource(url.toString());
+    source = new EventSource(runEventsPath(runId, currentLastEventId));
     source.addEventListener("shot", handlePayload);
     source.addEventListener("outcome", handlePayload);
     source.addEventListener("resync", handlePayload);

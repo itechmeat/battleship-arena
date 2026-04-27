@@ -32,7 +32,7 @@ describe("OpenRouter adapter", () => {
 
     const output = await adapter.call(
       {
-        modelId: "openai/gpt-5-nano",
+        modelId: "openai/gpt-5.4-nano",
         apiKey: "sk-test",
         boardText: "   ABCDEFGHIJ\n01 ..........",
         shipsRemaining: ["Carrier"],
@@ -45,13 +45,14 @@ describe("OpenRouter adapter", () => {
 
     expect(requests[0]?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(requests[0]?.authorization).toBe("Bearer sk-test");
-    expect(requests[0]?.body.model).toBe("openai/gpt-5-nano");
+    expect(requests[0]?.body.model).toBe("openai/gpt-5.4-nano");
     expect(requests[0]?.body.max_tokens).toBe(2_048);
     expect(requests[0]?.body.reasoning).toEqual({
       effort: "minimal",
       exclude: true,
     });
-    expect(requests[0]?.body.verbosity).toBe("low");
+    expect(requests[0]?.body).not.toHaveProperty("verbosity");
+    expect(requests[0]?.body.response_format).toEqual({ type: "json_object" });
     expect(JSON.stringify(requests[0]?.body)).toContain("Current board:");
     expect(JSON.stringify(requests[0]?.body)).not.toContain("Ships still afloat");
     expect(JSON.stringify(requests[0]?.body)).toContain("No separate shot history is provided");
@@ -67,7 +68,46 @@ describe("OpenRouter adapter", () => {
     expect(output.tokensIn).toBe(1000);
     expect(output.tokensOut).toBe(500);
     expect(output.reasoningTokens).toBe(100);
-    expect(output.costUsdMicros).toBe(250);
+    expect(output.costUsdMicros).toBe(825);
+  });
+
+  test("omits unsupported OpenRouter request parameters for model capabilities", async () => {
+    const requests: Array<{ body: Record<string, unknown> }> = [];
+    const fetch = (async (_url, init) => {
+      requests.push({
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+
+      return Response.json({
+        choices: [{ message: { content: '{"row":1,"col":2}' } }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 20,
+        },
+      });
+    }) as typeof globalThis.fetch;
+    const adapter = createOpenRouterAdapter({ fetch, pricing: PRICING_TABLE });
+
+    await adapter.call(
+      {
+        modelId: "aion-labs/aion-2.0",
+        apiKey: "sk-test",
+        boardText: "   ABCDEFGHIJ\n01 ..........",
+        shipsRemaining: ["Carrier"],
+        systemPrompt: "Return JSON.",
+        priorShots: [],
+        seedDate: "2026-04-24",
+      },
+      new AbortController().signal,
+    );
+
+    expect(requests[0]?.body.model).toBe("aion-labs/aion-2.0");
+    expect(requests[0]?.body).not.toHaveProperty("verbosity");
+    expect(requests[0]?.body).not.toHaveProperty("response_format");
+    expect(requests[0]?.body.reasoning).toEqual({
+      effort: "minimal",
+      exclude: true,
+    });
   });
 
   test("omits reasoning request fields when an optional reasoning model is run with reasoning disabled", async () => {
@@ -89,7 +129,7 @@ describe("OpenRouter adapter", () => {
 
     await adapter.call(
       {
-        modelId: "openai/gpt-5-nano",
+        modelId: "openai/gpt-5.4-nano",
         apiKey: "sk-test",
         reasoningEnabled: false,
         boardText: "   ABCDEFGHIJ\n01 ..........",
@@ -114,7 +154,7 @@ describe("OpenRouter adapter", () => {
 
     const output = await adapter.call(
       {
-        modelId: "openai/gpt-5-nano",
+        modelId: "openai/gpt-5.4-nano",
         apiKey: "sk-test",
         boardText: "   ABCDEFGHIJ\n01 ..........",
         shipsRemaining: ["Carrier"],
@@ -167,7 +207,7 @@ describe("OpenRouter adapter", () => {
       });
       const output = await adapter.call(
         {
-          modelId: "openai/gpt-5-nano",
+          modelId: "openai/gpt-5.4-nano",
           apiKey: sentinelKey,
           boardText: "   ABCDEFGHIJ\n01 ..........",
           shipsRemaining: ["Carrier"],
@@ -198,7 +238,7 @@ describe("OpenRouter adapter", () => {
     await expect(
       adapter.call(
         {
-          modelId: "openai/gpt-5-nano",
+          modelId: "openai/gpt-5.4-nano",
           apiKey: "sk-test",
           boardText: "   ABCDEFGHIJ\n01 ..........",
           shipsRemaining: ["Carrier"],
@@ -216,7 +256,7 @@ describe("OpenRouter adapter", () => {
     await expect(
       adapter.call(
         {
-          modelId: "openai/gpt-5-nano",
+          modelId: "openai/gpt-5.4-nano",
           apiKey: "sk-test",
           boardText: "   ABCDEFGHIJ\n01 ..........",
           shipsRemaining: ["Carrier"],
@@ -227,5 +267,72 @@ describe("OpenRouter adapter", () => {
         new AbortController().signal,
       ),
     ).rejects.toBeInstanceOf(ProviderError);
+  });
+
+  test("classifies OpenRouter key limit failures as quota ProviderError", async () => {
+    const fetch = (async () =>
+      Response.json(
+        {
+          error: {
+            message: "Key limit exceeded (total limit). Manage it using settings.",
+            code: 403,
+          },
+        },
+        { status: 403 },
+      )) as unknown as typeof globalThis.fetch;
+    const adapter = createOpenRouterAdapter({ fetch, pricing: PRICING_TABLE });
+
+    await expect(
+      adapter.call(
+        {
+          modelId: "aion-labs/aion-2.0",
+          apiKey: "sk-test",
+          boardText: "   ABCDEFGHIJ\n01 ..........",
+          shipsRemaining: ["Carrier"],
+          systemPrompt: "Return JSON.",
+          priorShots: [],
+          seedDate: "2026-04-24",
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      kind: "unreachable",
+      code: "quota",
+      status: 403,
+      cause: expect.stringContaining("Key limit exceeded"),
+    });
+  });
+
+  test("translates exhausted HTTP 429 responses to rate-limited ProviderError", async () => {
+    let attempts = 0;
+    const fetch = (async () => {
+      attempts += 1;
+      return new Response("free-models-per-min", {
+        status: 429,
+        headers: { "Retry-After": "0" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+    const adapter = createOpenRouterAdapter({ fetch, pricing: PRICING_TABLE });
+
+    await expect(
+      adapter.call(
+        {
+          modelId: "openai/gpt-5.4-nano",
+          apiKey: "sk-test",
+          boardText: "   ABCDEFGHIJ\n01 ..........",
+          shipsRemaining: ["Carrier"],
+          systemPrompt: "Return JSON.",
+          priorShots: [],
+          seedDate: "2026-04-24",
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      kind: "unreachable",
+      code: "rate_limited",
+      status: 429,
+      cause: expect.stringContaining("free-models-per-min"),
+    });
+    expect(attempts).toBe(3);
   });
 });
