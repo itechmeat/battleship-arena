@@ -32,8 +32,9 @@ Adaptive depth: routine stories run lean (skip phase 3, short brainstorm, skip p
 _Open a fresh Claude Code session. Paste this prompt first, then paste your feature description right after it._
 
 Use the `openspec-new-change` skill to scaffold a change based on the feature description I will paste after this prompt.
-Derive a kebab-case slug from the description yourself.
-Stop before drafting any artifact. Output the chosen slug and the change folder path so I can carry the slug into the next phases.
+Derive a kebab-case slug from the description yourself, then actually run `openspec new change [slug]` to create the folder. Do not just propose a slug - the folder must exist after this phase.
+After scaffolding, stop. Do not draft proposal.md, specs, design notes, or tasks yet - those are later phases.
+Output the chosen slug and the change folder path so I can carry the slug into the next phases.
 
 [your_feature_prompt]
 
