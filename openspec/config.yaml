@@ -1,20 +1,45 @@
-schema: spec-driven
+schema: battleship-arena-v2
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  ## Project
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  BattleShipArena - mobile-first PWA benchmark for LLMs playing Battleship.
+  Tech stack: TypeScript, Bun, Hono (backend), Astro (web), SQLite.
+
+  Authoritative project documents:
+  - `docs/about.md` - product description
+  - `docs/spec.md` - full spec and pinned minimum versions (never install below the spec minimum)
+  - `docs/architecture.md` - system layout
+  - `docs/plan.md` - story-level planning
+
+  Engineering rules that affect every artifact:
+  - Tests must NEVER touch the production database. Integration tests use `withTempDatabase()`.
+  - CI uses the mock LLM provider only. Real-token tests run on staging.
+  - TDD is mandatory from S2 onwards.
+  - Conventional commits via the `commits` skill.
+
+rules:
+  brainstorm:
+    - "Run the `superpowers:brainstorming` skill before writing this artifact."
+    - "Adaptive depth - routine stories can be brief (Intent + Decisions + Out of scope only); fuzzy or major work fills every section."
+    - "Never delete `brainstorm.md` later. It is design rationale and stays in the change folder."
+
+  proposal:
+    - "Always include a Non-goals section."
+    - "Carry decisions and rationale from `brainstorm.md` into the proposal so it is self-contained."
+
+  design:
+    - "Reference decisions already made in `brainstorm.md` instead of re-deriving them."
+    - "Capture only the architectural choices and trade-offs that need a permanent record."
+    - "If the change touches the database, include a migration strategy with rollback steps."
+
+  specs:
+    - "Delta specs - be precise about ADD / MODIFY / REMOVE."
+    - "Scenarios MUST use exactly 4 hashtags (`####`). Three hashtags or bullets fail silently."
+    - "On archive, delta specs are synced into `openspec/specs/` so the next change starts from updated truth."
+
+  tasks:
+    - "Each task must be small enough that a sub-agent can complete it using only the change folder and relevant `specs/` files. No chat history required."
+    - "State the verification command for each task explicitly (test file, lint command, build target). No `should work` claims."
+    - "Tests come first. TDD is mandatory from S2 onwards."
+    - "Group independent tasks for parallel dispatch via the `superpowers:dispatching-parallel-agents` skill."

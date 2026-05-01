@@ -25,6 +25,12 @@
       "Bash(git branch --show-current)"
     ],
     "deny": [
+      "Read(**/.env*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Read(**/.ssh/**)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git pull:*)",

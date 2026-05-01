@@ -9,5 +9,5 @@
   "rules": {
     "no-console": "off"
   },
-  "ignorePatterns": ["dist", "node_modules", "web/.astro"]
+  "ignorePatterns": ["dist", "node_modules", "web/.astro", ".agents/skills/**", ".claude/skills/**"]
 }
