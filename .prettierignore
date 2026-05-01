@@ -1,6 +1,7 @@
 # Vendored / template content - not authored by us, should not be reformatted.
 .agents/skills/**
 .claude/skills/**
+openspec/**
 
 # Build outputs
 dist/
