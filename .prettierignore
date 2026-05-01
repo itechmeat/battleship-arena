@@ -1,0 +1,8 @@
+# Vendored / template content - not authored by us, should not be reformatted.
+.agents/skills/**
+.claude/skills/**
+
+# Build outputs
+dist/
+node_modules/
+web/.astro/

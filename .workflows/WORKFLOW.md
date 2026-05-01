@@ -55,24 +55,24 @@ When done, run `make fix` and make sure every issue is resolved; fix anything le
 
 ## Review
 
-- [x] 🤖 Codex
+- [ ] 🤖 Codex
 
 Run a self-review (without CodeRabbit) of the changes introduced to the project (diff) to check whether everything matches a senior level of development, the correctness of the architectural decisions taken, and best practices. If you see something that should be fixed - fix it yourself, autonomously, without extra questions.
 When done, run `make fix` and make sure every issue is resolved; fix anything left manually.
 
-- [x] 🦊 Claude Code
+- [ ] 🦊 Claude Code
 
 Use superpowers to review the implementation of the current openspec change.
 If the diff is large, you may split it across several sub-agents.
 Changing code is forbidden - I expect review only!
 ultrathink
 
-- [x] 🤖 Codex
+- [ ] 🤖 Codex
 
 I have a review of the implementation of the current openspec change; the decision to follow the reviewer's recommendations or not is yours.
 When done, run `make fix` and make sure every issue is resolved; fix anything left manually.
 
-- [-] 🦊 Claude Code
+- [ ] 🦊 Claude Code
 
 Archive the current openspec change.
 If needed, without asking me, sync delta specs into main specs.
